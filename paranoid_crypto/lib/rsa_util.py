@@ -576,6 +576,10 @@ def CheckLowHammingWeight(
   threshold_cutoff = n.bit_length()
   threshold_weak = n.bit_length() - 12
 
+  # A zero modulus (e.g. an empty n field) has no factors to search for.
+  # CheckSizes already flags it.
+  if n == 0:
+    return False, []
   psize = (n.bit_length() + 1) // 2
   steps = 0
   remainder = n - (1 << (2 * (psize - 1)))
