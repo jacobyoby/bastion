@@ -16,6 +16,7 @@
 import collections
 from typing import Optional
 from absl import logging
+import gmpy2 as gmpy
 from paranoid_crypto import paranoid_pb2
 from paranoid_crypto.lib import base_check
 from paranoid_crypto.lib import consts
@@ -62,6 +63,35 @@ def _UniqueValidECDSAValues(
       logging.warning("Invalid ECDSA signature skipped: %s",
                       sigs[idx].ecdsa_sig_info)
   return list(values)
+
+
+def _NonceReuseGuesses(r: int, s1: int, z1: int, s2: int, z2: int,
+                       n: int) -> set[int]:
+  """Returns private key guesses for two signatures that share the value r.
+
+  The same r arises from a nonce k or from n - k. With s1 * k = z1 + r * d and
+  s2 * (+-k) = z2 + r * d (mod n), subtracting gives
+  k = (z1 - z2) / (s1 -+ s2) (mod n), and then d = (s1 * k - z1) / r (mod n).
+
+  Args:
+    r: the shared first element of both signatures, with 0 < r < n
+    s1: second element of the first signature
+    z1: truncated hash of the first signature
+    s2: second element of the second signature
+    z2: truncated hash of the second signature
+    n: order of the EC group
+
+  Returns:
+    a set of guesses for the private key.
+  """
+  guesses = set()
+  r_inv = int(gmpy.invert(r, n))
+  for s_diff in (s1 - s2, s1 + s2):
+    if s_diff % n == 0:
+      continue
+    k = (z1 - z2) * int(gmpy.invert(s_diff, n)) % n
+    guesses.add((s1 * k - z1) * r_inv % n)
+  return guesses
 
 
 def _IssuerDLogs(guesses: list[int], pks: dict[tuple[int, int], list[int]],
@@ -214,6 +244,52 @@ class CheckNonceGeneralized(BiasedBaseCheck):
 
   def __init__(self):
     super().__init__(bias=hnp.Bias.GENERALIZED)
+
+
+class CheckNonceReuse(base_check.ECDSASignatureCheck):
+  """Checks whether two signatures of the same key share a nonce.
+
+  Two signatures with the same r were generated with the same nonce k (or with
+  n - k), and together they reveal the private key with no search at all. This
+  was the flaw behind the PlayStation 3 key recovery and the 2013 Android
+  Bitcoin wallet thefts.
+  """
+
+  def __init__(self):
+    super().__init__(paranoid_pb2.SeverityType.SEVERITY_CRITICAL)
+
+  def Check(self, artifacts: list[paranoid_pb2.ECDSASignature]) -> bool:
+    any_weak = False
+    for curve_id, curve in ec_util.CURVE_FACTORY.items():
+      if curve is None:
+        continue
+      sigs = [s for s in artifacts if s.issuer_key_info.curve_type == curve_id]
+      if not sigs:
+        continue
+      pks = _MapIssuerSigIndexes(sigs)
+      guesses = set()
+      for _, idxs in pks.items():
+        sigs_by_r = collections.defaultdict(list)
+        for r, s, z in _UniqueValidECDSAValues(sigs, idxs, curve):
+          sigs_by_r[r].append((s, z))
+        for r, values in sigs_by_r.items():
+          # Any one pair reveals the key, so adjacent pairs suffice: this stays
+          # linear when a stuck RNG gives many signatures the same r.
+          for (s1, z1), (s2, z2) in zip(values, values[1:]):
+            guesses.update(_NonceReuseGuesses(r, s1, z1, s2, z2, curve.n))
+      issuer_dlogs = _IssuerDLogs(list(guesses), pks, curve)
+      # Store the test results
+      for i, sig in enumerate(sigs):
+        test_result = self._CreateTestResult()
+        if i in issuer_dlogs:
+          dlog = format(int(issuer_dlogs[i]), "x")
+          logging.warning("Check nonce reuse failed. Issuer dlog found: %s %s",
+                          dlog, sig.ecdsa_sig_info)
+          util.AttachInfo(sig.test_info, consts.INFO_NAME_DISCRETE_LOG, dlog)
+          any_weak = True
+          test_result.result = True
+        util.SetTestResult(sig.test_info, test_result)
+    return any_weak
 
 
 class CheckIssuerKey(base_check.ECDSASignatureCheck):

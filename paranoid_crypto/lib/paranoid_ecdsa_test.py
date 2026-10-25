@@ -520,6 +520,52 @@ bad_ecdsa_generalized = [
     copy.deepcopy(bad_ecdsa_generalized_1),
 ]
 
+
+def _Secp256r1Sig(r: str, s: str, message_hash: str, x: str,
+                  y: str) -> paranoid_pb2.ECDSASignature:
+  sig = paranoid_pb2.ECDSASignature()
+  sig.ecdsa_sig_info.algorithm = paranoid_pb2.SignatureAlgorithm.ECDSA_WITH_SHA256
+  sig.ecdsa_sig_info.r = util.Hex2Bytes(r)
+  sig.ecdsa_sig_info.s = util.Hex2Bytes(s)
+  sig.ecdsa_sig_info.message_hash = util.Hex2Bytes(message_hash)
+  sig.issuer_key_info.curve_type = paranoid_pb2.CurveType.CURVE_SECP256R1
+  sig.issuer_key_info.x = util.Hex2Bytes(x)
+  sig.issuer_key_info.y = util.Hex2Bytes(y)
+  return sig
+
+
+# Two signatures of one key with the same nonce k.
+_reuse_key_x = '775a7582a717bf46cbaf1f41c43ee0e6b78312a6359f61386e49ee92ef961a5f'
+_reuse_key_y = 'a93f36b2abcff4476bc4fe1a93a6deb191fe502c1271cf317905dc91b70e3460'
+bad_ecdsa_nonce_reuse = [
+    _Secp256r1Sig(
+        '9a24d4e30e96e30260335018e235863887e6c33e69ddec43e9379283efb7180c',
+        '0928590056b83b6e3723d91793c88a255caf901bfc98a628d7b538a5a2880fec',
+        '44d077a84b34cf76ebf4391348baa9da274efa74dff065a81a3d255880128933',
+        _reuse_key_x, _reuse_key_y),
+    _Secp256r1Sig(
+        '9a24d4e30e96e30260335018e235863887e6c33e69ddec43e9379283efb7180c',
+        'f9680bdbc0a493a52cf2cd36d28301c568c6133d7f8213b73866ce7a89e5f198',
+        '47dc156ae636adc6534d951f54c5935dbfacdaa5cfa049e202d09db5633aa665',
+        _reuse_key_x, _reuse_key_y),
+]
+
+# Two signatures of one key with nonces k and n - k, which share r.
+_negated_key_x = 'ed1da2e458176f4d1efbc820940d5317cafde315d87ae4ccb9d3b4c86ca18781'
+_negated_key_y = 'a8f33afe97af258d0e888f6f9f26e65d3ea9aa92c95a316a1fa6d4d77d526670'
+bad_ecdsa_nonce_negated = [
+    _Secp256r1Sig(
+        '89a79ac2082ae554f14510a9d7ab1137cca34728f9041ef5a27d08b149c05eff',
+        '5101dc22e01fb875d5b57db9c32463bd50295c1efe23c7ec398acb22894a0c8d',
+        '4d55878139551fc4af8b914d6d6ffcdfedd1ca0995f8a3003796bf3cf09ba7d8',
+        _negated_key_x, _negated_key_y),
+    _Secp256r1Sig(
+        '89a79ac2082ae554f14510a9d7ab1137cca34728f9041ef5a27d08b149c05eff',
+        'fd1df073ca423b43bb001c3c29bad223b551a824727c01c9ce1b28203ed4c3ee',
+        '039c540c801b382f9e876cba5bf864d34cf7c2ba3e4e0067ed2d1192f3aa784c',
+        _negated_key_x, _negated_key_y),
+]
+
 # Trick to replace CheckECKeySmallDifference default max_diff (tests run faster)
 ec_aggregate_checks.CheckECKeySmallDifference.__init__.__defaults__ = (2**8,)
 
@@ -542,6 +588,16 @@ class ParanoidECDSATest(paranoid_base_test.ParanoidBaseTest):
     check = ecdsa_sig_checks.CheckCr50U2f()
     self.assertTrue(check.Check(bad_ecdsa_cr50u2f))
     self.assertResults(bad_ecdsa_cr50u2f, check.check_name, True)
+
+  def testCheckNonceReuse(self):
+    check = ecdsa_sig_checks.CheckNonceReuse()
+    sigs = bad_ecdsa_nonce_reuse + bad_ecdsa_nonce_negated
+    self.assertTrue(check.Check(sigs))
+    self.assertResults(sigs, check.check_name, True)
+    # One signature per key cannot reveal a repeated nonce.
+    check = ecdsa_sig_checks.CheckNonceReuse()
+    single = copy.deepcopy(bad_ecdsa_nonce_reuse[0])
+    self.assertFalse(check.Check([single]))
 
   def testCheckLCGNonceGMP(self):
     check = ecdsa_sig_checks.CheckLCGNonceGMP()
