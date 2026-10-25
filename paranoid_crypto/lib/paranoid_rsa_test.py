@@ -360,6 +360,17 @@ class ParanoidRSATest(paranoid_base_test.ParanoidBaseTest):
       self.assertResults(good_rsa_keys, rsa_check_name, False)
     self.assertTrue(paranoid.CheckAllRSA(good_and_bad_rsa_keys))
 
+  def testCheckAllRSAEmpty(self):
+    self.assertFalse(paranoid.CheckAllRSA([]))
+
+  def testCheckAllRSATinyModulus(self):
+    # CheckSizes flags a malformed tiny modulus; no other check may abort.
+    key = paranoid_pb2.RSAKey()
+    key.rsa_info.n = util.Int2Bytes(3)
+    key.rsa_info.e = util.Int2Bytes(65537)
+    self.assertTrue(paranoid.CheckAllRSA([key]))
+    self.assertResults([key], 'CheckSizes', True)
+
 
 if __name__ == '__main__':
   absltest.main()

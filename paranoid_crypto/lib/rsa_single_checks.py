@@ -508,11 +508,12 @@ class CheckUnseededRand(base_check.RSAKeyCheck):
       list_unseeded_rands = self._storage.GetUnseededRands(psize)
       test_result = self._CreateTestResult()
 
-      msb_1 = 2 ** (psize - 1)
-      msb_11 = msb_1 | 2 ** (psize - 2)
       factors = None
       for p_0 in list_unseeded_rands:
-        # Also test with the most significant bits set to 1.
+        # Also test with the most significant bits set to 1. Computed only
+        # when candidates exist, since tiny moduli make psize - 2 negative.
+        msb_1 = 2 ** (psize - 1)
+        msb_11 = msb_1 | 2 ** (psize - 2)
         for p_1 in {p_0, p_0 | msb_1, p_0 | msb_11}:
           factors = special_case_factoring.FactorWithGuess(n, p_1)
           if factors:
@@ -576,7 +577,9 @@ class CheckKeypairDenylist(base_check.RSAKeyCheck):
     for key in artifacts:
       test_result = self._CreateTestResult()
       n = util.Bytes2Int(key.rsa_info.n)
-      n_msb = n >> (n.bit_length() - 64)
+      # Table keys are the 64 msbs of a modulus. A modulus shorter than 64 bits
+      # is kept whole; it cannot match since all table keys have bit 63 set.
+      n_msb = n >> max(n.bit_length() - 64, 0)
       if n_msb in self._table:
         metadata = self._table[n_msb]
         seed = bytearray([metadata[0]] + [0] * 31)

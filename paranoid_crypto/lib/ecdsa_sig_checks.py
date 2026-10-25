@@ -23,7 +23,6 @@ from paranoid_crypto.lib import cr50_u2f_weakness
 from paranoid_crypto.lib import ec_util
 from paranoid_crypto.lib import hidden_number_problem as hnp
 from paranoid_crypto.lib import lcg_constants
-from paranoid_crypto.lib import paranoid
 from paranoid_crypto.lib import util
 
 
@@ -35,6 +34,34 @@ def _MapIssuerSigIndexes(
   for i, sig in enumerate(sigs):
     pks[ec_util.PublicPoint(sig.issuer_key_info)].append(i)
   return pks
+
+
+def _UniqueValidECDSAValues(
+    sigs: list[paranoid_pb2.ECDSASignature], idxs: list[int],
+    curve: ec_util.EcCurve) -> list[tuple[int, int, int]]:
+  """Returns the distinct (r, s, z) values of the valid signatures in idxs.
+
+  A signature with r or s outside [1, n - 1] is not a valid ECDSA signature and
+  gives no hidden number problem (s has no inverse when s == 0 mod n), so it is
+  logged and left out.
+
+  Args:
+    sigs: signatures on curve
+    idxs: indexes into sigs
+    curve: the EC curve of the signatures
+
+  Returns:
+    the distinct (r, s, z) triples of the valid signatures.
+  """
+  values = set()
+  for idx in idxs:
+    r, s, z = ec_util.ECDSAValues(sigs[idx].ecdsa_sig_info, curve)
+    if 0 < r < curve.n and 0 < s < curve.n:
+      values.add((r, s, z))
+    else:
+      logging.warning("Invalid ECDSA signature skipped: %s",
+                      sigs[idx].ecdsa_sig_info)
+  return list(values)
 
 
 def _IssuerDLogs(guesses: list[int], pks: dict[tuple[int, int], list[int]],
@@ -93,9 +120,7 @@ class BiasedBaseCheck(base_check.ECDSASignatureCheck):
       guesses = set()
       for _, idxs in pks.items():
         # Exclude duplicate signatures from the actual processing
-        unique_vals = list({
-            ec_util.ECDSAValues(sigs[idx].ecdsa_sig_info, curve) for idx in idxs
-        })
+        unique_vals = _UniqueValidECDSAValues(sigs, idxs, curve)
         a, b = [None] * len(unique_vals), [None] * len(unique_vals)
         for i in range(len(unique_vals)):
           r, s, z = unique_vals[i]
@@ -204,6 +229,9 @@ class CheckIssuerKey(base_check.ECDSASignatureCheck):
     super().__init__(paranoid_pb2.SeverityType.SEVERITY_UNKNOWN)
 
   def Check(self, artifacts: list[paranoid_pb2.ECDSASignature]) -> bool:
+    # Imported here because paranoid imports this module to list its checks.
+    from paranoid_crypto.lib import paranoid  # pylint: disable=g-import-not-at-top
+
     any_weak = False
     # Maps points/public keys into signature indexes to avoid duplicated keys:
     points = {}
@@ -251,9 +279,9 @@ class CheckCr50U2f(base_check.ECDSASignatureCheck):
       guesses = set()
       for _, idxs in pks.items():
         # Exclude duplicate signatures from the actual processing
-        unique_vals = list({
-            ec_util.ECDSAValues(sigs[idx].ecdsa_sig_info, curve) for idx in idxs
-        })
+        unique_vals = _UniqueValidECDSAValues(sigs, idxs, curve)
+        if not unique_vals:
+          continue
         # Sliding window. Two signatures are enough to detect this vulnerability
         for i in range(len(unique_vals) - 1):
           r1, s1, z1 = unique_vals[i]

@@ -177,6 +177,10 @@ class EcCurve:
     if p == INFINITY:
       return p
     x, y = p
+    # The tangent at y == 0 is vertical. This also keeps invalid public keys
+    # with y == 0 (mod p) from failing the inversion below.
+    if y % self.mod == 0:
+      return INFINITY
     num = (3 * x * x + self.a) % self.mod
     den = 2 * y
     t = num * gmpy.invert(den, self.mod) % self.mod
@@ -200,8 +204,10 @@ class EcCurve:
       return p
     x1, y1 = p
     x2, y2 = q
-    if x1 == x2:
-      if y1 == y2:
+    # Compared modulo p: public keys are not range checked before batch
+    # operations, and unreduced coordinates would make x1 - x2 non-invertible.
+    if (x1 - x2) % self.mod == 0:
+      if (y1 - y2) % self.mod == 0:
         return self.Double(p)
       else:
         return INFINITY
@@ -514,7 +520,7 @@ class EcCurve:
     tmp = [None] * size
     for i, p in enumerate(p_list):
       if p != INFINITY:
-        tmp[i] = 2 * p[1]
+        tmp[i] = 2 * p[1] % self.mod
     tmp = self.BatchInverse(tmp)
     res = [(None, None)] * size
     for i, p in enumerate(p_list):

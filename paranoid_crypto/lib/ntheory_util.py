@@ -44,6 +44,8 @@ def ExtendedProductTree(values: list[int]) -> tuple[list[list[int]], int]:
     values: List of values to calculate the product.
   """
   prod_tree = [values]
+  if not values:
+    return prod_tree, 0  # T is an empty sum.
   t = [1] * len(values)
   while len(values) > 1:
     last_t = t[-1]

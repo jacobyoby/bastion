@@ -14,6 +14,8 @@
 """ECDSA Tests for paranoid_crypto.lib.paranoid."""
 
 import copy
+import subprocess
+import sys
 from absl.testing import absltest
 from paranoid_crypto import paranoid_pb2
 from paranoid_crypto.lib import paranoid
@@ -575,6 +577,21 @@ class ParanoidECDSATest(paranoid_base_test.ParanoidBaseTest):
     self.assertFalse(paranoid.CheckAllECDSASigs(good_ecdsa_sigs))
     for ecdsa_check_name in paranoid.GetECDSAAllChecks():
       self.assertResults(good_ecdsa_sigs, ecdsa_check_name, False)
+
+  def testCheckAllECDSASigsWithInvalidSignature(self):
+    # s = 0 is not a valid ECDSA signature and has no modular inverse.
+    invalid_sig = copy.deepcopy(good_ecdsa_secp256r1)
+    invalid_sig.ecdsa_sig_info.s = util.Int2Bytes(0)
+    sigs = [invalid_sig, copy.deepcopy(good_ecdsa_secp256r1)]
+    self.assertFalse(paranoid.CheckAllECDSASigs(sigs))
+
+  def testImportBeforeParanoid(self):
+    # This test module has already imported paranoid, so a fresh interpreter
+    # is needed to import ecdsa_sig_checks first.
+    subprocess.run(
+        [sys.executable, '-c',
+         'from paranoid_crypto.lib import ecdsa_sig_checks'],
+        check=True)
 
 
 if __name__ == '__main__':

@@ -100,6 +100,13 @@ bad_ec_key_invalid.ec_info.x = util.Hex2Bytes(
 bad_ec_key_invalid.ec_info.y = util.Hex2Bytes(
     '1482742fb02284f75f603f9b0057a89f32ff0a361694fb178a75de56efd61469')
 
+# An EC key that is not on the curve and has y = 0, so doubling it has no
+# modular inverse.
+bad_ec_key_y_zero = paranoid_pb2.ECKey()
+bad_ec_key_y_zero.ec_info.curve_type = paranoid_pb2.CurveType.CURVE_SECP256R1
+bad_ec_key_y_zero.ec_info.x = util.Int2Bytes(5)
+bad_ec_key_y_zero.ec_info.y = util.Int2Bytes(0)
+
 # An EC key on a weak curve
 bad_ec_key_weak_curve = paranoid_pb2.ECKey()
 bad_ec_key_weak_curve.ec_info.curve_type = paranoid_pb2.CurveType.CURVE_SECP192R1
@@ -204,6 +211,11 @@ class ParanoidECTest(paranoid_base_test.ParanoidBaseTest):
     self.assertFalse(paranoid.CheckAllEC(good_ec_keys))
     for ec_check_name in paranoid.GetECAllChecks():
       self.assertResults(good_ec_keys, ec_check_name, False)
+
+  def testCheckAllECRepeatedKeyWithYZero(self):
+    keys = [bad_ec_key_y_zero, bad_ec_key_y_zero]
+    self.assertTrue(paranoid.CheckAllEC(keys))
+    self.assertResults(keys, 'CheckValidECKey', True)
 
 
 if __name__ == '__main__':
