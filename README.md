@@ -1,4 +1,21 @@
-# Project Paranoid
+# Bastion
+
+Bastion is a fork of Google's [Paranoid](https://github.com/google/paranoid_crypto)
+maintained by Jacob Durham. It is not affiliated with or supported by Google. The
+Python package keeps the upstream name `paranoid_crypto`, so code written for
+Paranoid runs unchanged.
+
+### Differences from upstream
+
+-   **CheckNonceReuse**: recovers the private key from two ECDSA signatures of
+    one key that share a nonce. See
+    [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuse).
+-   **Malformed input does not abort a run**: an empty batch, a tiny or empty
+    RSA modulus, an ECDSA signature with r or s outside [1, n - 1], or an invalid EC
+    point with y = 0 (mod p) is reported or skipped instead of raising out of
+    every check in the batch.
+-   **Import order**: `paranoid_crypto.lib.ecdsa_sig_checks` can be imported
+    before `paranoid_crypto.lib.paranoid`.
 
 ## Overview
 
@@ -73,10 +90,12 @@ different crypto artifacts.
 
 Clone the repository:
 
-```$ git clone https://github.com/google/paranoid_crypto.git && cd paranoid_crypto```
+```$ git clone https://github.com/jacobyoby/bastion.git && cd bastion```
 
-**NOTE**: The commands below have been tested on Debian stable version
-(bookworm). Make sure you will be using `python3.11` or newer.
+#### Debian
+
+**NOTE**: Upstream tested the commands below on Debian 12 (bookworm). Make sure
+you will be using `python3.11` or newer.
 
 Install dependencies:
 
@@ -95,17 +114,33 @@ Install paranoid_crypto python package:
 
 ```$ python3 -m pip install .```
 
-To check whether the installation was successful, you can run the unit tests.
-For example:
+To check whether the installation was successful, run the unit tests. All 311
+should pass:
+
+```$ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"```
+
+#### macOS (Apple Silicon)
+
+Tested on macOS 27.2 with Homebrew and [uv](https://docs.astral.sh/uv/). The
+pinned `protobuf==3.20.*` runtime needs an older protoc than Homebrew ships. These
+steps use the matching protoc 3.20.3, whose release has no Apple Silicon binary,
+so the x86_64 binary runs under Rosetta (`softwareupdate --install-rosetta` if it
+is missing).
 
 ```
-$ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"
-.................................................................................................................................................................................................................................................................................................................
-----------------------------------------------------------------------
-Ran 305 tests in 314.660s
-
-OK
+$ brew install fplll
+$ uv venv -p 3.11 .venv
+$ curl -L -o /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v3.20.3/protoc-3.20.3-osx-x86_64.zip
+$ unzip -o /tmp/protoc.zip -d .venv/protoc
+$ export CPATH=/opt/homebrew/include LIBRARY_PATH=/opt/homebrew/lib PROTOC=$PWD/.venv/protoc/bin/protoc
+$ uv pip install -p .venv -r requirements.txt pybind11 setuptools gmpy2 cysignals fpylll
+$ uv pip install -p .venv --no-build-isolation -e .
 ```
+
+Run the unit tests. All 311 pass in about 2.5 minutes on an Apple Silicon Mac
+mini:
+
+```$ cd paranoid_crypto && ../.venv/bin/python -m unittest discover -b -p "*test.py"```
 
 ### Docker
 
@@ -126,21 +161,17 @@ $ docker run --name paranoid-container -it paranoid-img
 paranoid-user@6191368b26b8:~$
 ```
 
-To check whether the installation was successful, you can run the unit tests.
-For example:
+To check whether the installation was successful, run the unit tests inside the
+container:
 
 ```
 paranoid-user@6191368b26b8:~$ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"
-.................................................................................................................................................................................................................................................................................................................
-----------------------------------------------------------------------
-Ran 305 tests in 307.555s
-
-OK
 ```
 
 ## Preliminary results
 
-Similar to other published works, we have been analyzing the crypto artifacts
+These are the upstream Paranoid team's results, as of September 2022. Similar to
+other published works, they have been analyzing the crypto artifacts
 from [Certificate Transparency (CT)](https://certificate.transparency.dev),
 which logs issued website certificates since 2013 with the goal of making them
 transparent and verifiable. Its database contains more than 7 billion
@@ -167,10 +198,14 @@ the Certificate Authorities to be revoked.
 
 ## ABOUT
 
-This library is developed and maintained by members of Google Security Team, but
-this is not an officially supported Google product. If you want to contribute,
-please read [CONTRIBUTING](CONTRIBUTING.md) and send us pull requests. You can
-also report bugs or file feature requests.
+Bastion is maintained by Jacob Durham at
+[jacobyoby/bastion](https://github.com/jacobyoby/bastion).
+
+The upstream library was developed by members of the Google Security Team and is
+not an officially supported Google product.
+[google/paranoid_crypto](https://github.com/google/paranoid_crypto) is archived
+on GitHub and no longer accepts pull requests; [CONTRIBUTING](CONTRIBUTING.md)
+describes upstream's former process.
 
 If you use Paranoid in your research, you can cite it using the following
 BibTeX:

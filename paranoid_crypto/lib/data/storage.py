@@ -61,6 +61,7 @@ class Storage(metaclass=abc.ABCMeta):
   def GetOpensslDenylist(self) -> Set[str]:
     """Returns a set of data used on CVE-2008-0166 detection.
 
-    Each element of the set is a string of the format <keytype>:<h> where h
-    is the first 10 bytes of the RSA modulus (as a string) in hex format.
+    Each element of the set is a string of the format <keytype>:<h>, where
+    keytype is "RSA-<bit length of n>" and h is the last 20 hex digits of the
+    SHA-1 of "Modulus=<n in uppercase hex>\\n", as in openssl-vulnkey.
     """
