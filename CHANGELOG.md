@@ -34,6 +34,15 @@ Changes in Bastion since it forked from Google's
   bits: 688,128 new entries computed from badkeys/debianopenssl (CC0) and
   stored lzma-compressed. See
   [RSA public key tests](docs/rsa_public_key_tests.md#checkopenssldenylist).
+- **Half-half ECDSA nonces.** `CheckNonceHalfHalf` recovers the private key
+  from two signatures whose nonces combine half of the message hash with a
+  fixed half of the private key, a flaw that cost Bitcoin users funds. All four
+  placements of the hash half and both nonce signs are tried. See
+  [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncehalfhalf).
+- **ECDSA signature range.** `CheckECDSASignatureRange` reports signatures with
+  r or s outside [1, n - 1], such as the r = s = 0 "psychic signatures" that
+  Java 15 to 18 accepted (CVE-2022-21449). The nonce checks skip these. See
+  [ECDSA signature tests](docs/ecdsa_signature_tests.md#checkecdsasignaturerange).
 - **ECDSA nonce reuse.** `CheckNonceReuse` recovers the private key from two
   signatures of one key that share r, whether they used the nonce k or n - k.
   See [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuse).

@@ -105,6 +105,53 @@ def _NonceReuseGuesses(r: int, s1: int, z1: int, s2: int, z2: int,
   return guesses
 
 
+def _HalfHalfGuesses(r1: int, s1: int, z1: int, r2: int, s2: int, z2: int,
+                     curve: ec_util.EcCurve) -> set[int]:
+  """Returns private key guesses for two signatures with half-half nonces.
+
+  A half-half nonce has one half of the message hash z in one half of k and a
+  half of the private key d, the same for every signature, in the other half
+  [ePrint 2023/841]. So k = f(z) + c, where f places a half of z and c is an
+  unknown constant. With k = a + b * d (see HiddenNumberParams), subtracting
+  two signatures removes c:
+    d = (f(z1) - f(z2) - a1 + a2) / (b1 - b2) (mod n).
+  Every placement of the high or low half of z in the upper or lower half of k
+  is tried, and both signs of each nonce, since low-S normalization can
+  replace k by -k.
+
+  Args:
+    r1: value r of the first signature
+    s1: value s of the first signature
+    z1: truncated hash of the first signature
+    r2: value r of the second signature
+    s2: value s of the second signature
+    z2: truncated hash of the second signature
+    curve: the EC curve
+
+  Returns:
+    a set of guesses for the private key.
+  """
+  n = curve.n
+  half = n.bit_length() // 2
+  placements = (
+      lambda z: (z >> half) << half,
+      lambda z: (z % (1 << half)) << half,
+      lambda z: z >> half,
+      lambda z: z % (1 << half),
+  )
+  a1, b1 = curve.HiddenNumberParams(r1, s1, z1)
+  a2, b2 = curve.HiddenNumberParams(r2, s2, z2)
+  guesses = set()
+  for f in placements:
+    df = f(z1) - f(z2)
+    for sign1, sign2 in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+      den = (sign1 * b1 - sign2 * b2) % n
+      if den == 0:
+        continue
+      guesses.add(int((df - sign1 * a1 + sign2 * a2) * gmpy.invert(den, n) % n))
+  return guesses
+
+
 def _IssuerDLogs(guesses: list[int], pks: dict[tuple[int, int], list[int]],
                  curve: ec_util.EcCurve) -> dict[int, int]:
   """Check which guesses match public key discrete logs on a specific curve.
@@ -300,6 +347,80 @@ class CheckNonceReuse(base_check.ECDSASignatureCheck):
           any_weak = True
           test_result.result = True
         util.SetTestResult(sig.test_info, test_result)
+    return any_weak
+
+
+class CheckNonceHalfHalf(base_check.ECDSASignatureCheck):
+  """Checks whether signatures use "half-half" nonces.
+
+  Some Bitcoin software built each nonce from half of the message hash and a
+  fixed half of the private key, for example k = h_msb || d_msb. Two such
+  signatures of one key reveal the private key with no search (ePrint
+  2023/841; Kudelski Security recovered 110 Bitcoin keys this way). Pairs of
+  signatures of the same key are tested; every candidate is confirmed against
+  the issuer public key, so the check has no false positives.
+  """
+
+  def __init__(self):
+    super().__init__(paranoid_pb2.SeverityType.SEVERITY_CRITICAL)
+
+  def Check(self, artifacts: list[paranoid_pb2.ECDSASignature]) -> bool:
+    any_weak = False
+    for curve_id, curve in ec_util.CURVE_FACTORY.items():
+      if curve is None:
+        continue
+      sigs = [s for s in artifacts if s.issuer_key_info.curve_type == curve_id]
+      if not sigs:
+        continue
+      pks = _MapIssuerSigIndexes(sigs, curve)
+      guesses = set()
+      for _, idxs in pks.items():
+        values = _UniqueValidECDSAValues(sigs, idxs, curve)
+        for (r1, s1, z1), (r2, s2, z2) in zip(values, values[1:]):
+          guesses.update(_HalfHalfGuesses(r1, s1, z1, r2, s2, z2, curve))
+      issuer_dlogs = _IssuerDLogs(list(guesses), pks, curve)
+      # Store the test results
+      for i, sig in enumerate(sigs):
+        test_result = self._CreateTestResult()
+        if i in issuer_dlogs:
+          dlog = format(int(issuer_dlogs[i]), "x")
+          logging.warning("Check half-half nonce failed. Issuer dlog found: %s %s",
+                          dlog, sig.ecdsa_sig_info)
+          util.AttachInfo(sig.test_info, consts.INFO_NAME_DISCRETE_LOG, dlog)
+          any_weak = True
+          test_result.result = True
+        util.SetTestResult(sig.test_info, test_result)
+    return any_weak
+
+
+class CheckECDSASignatureRange(base_check.ECDSASignatureCheck):
+  """Checks whether r and s of each signature are in the range [1, n - 1].
+
+  Every valid ECDSA signature has 0 < r < n and 0 < s < n. Java 15 to 18 omitted
+  this check and accepted r = s = 0 for any message and any key
+  (CVE-2022-21449, "psychic signatures"), so an out-of-range signature in a
+  data set may be a forgery aimed at such verifiers, or the output of a broken
+  signer. The nonce checks skip these signatures; this check reports them.
+  Signatures on curves without an implementation get no result.
+  """
+
+  def __init__(self):
+    super().__init__(paranoid_pb2.SeverityType.SEVERITY_MEDIUM)
+
+  def Check(self, artifacts: list[paranoid_pb2.ECDSASignature]) -> bool:
+    any_weak = False
+    for sig in artifacts:
+      curve = ec_util.CURVE_FACTORY.get(sig.issuer_key_info.curve_type, None)
+      if curve is None:
+        continue
+      test_result = self._CreateTestResult()
+      r = util.Bytes2Int(sig.ecdsa_sig_info.r)
+      s = util.Bytes2Int(sig.ecdsa_sig_info.s)
+      if not (0 < r < curve.n and 0 < s < curve.n):
+        logging.warning("ECDSA signature out of range: %s", sig.ecdsa_sig_info)
+        any_weak = True
+        test_result.result = True
+      util.SetTestResult(sig.test_info, test_result)
     return any_weak
 
 

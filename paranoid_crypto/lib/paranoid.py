@@ -68,7 +68,9 @@ _ACTIVE_RSA_AGGREGATE_CHECKS = (
 )
 
 _ACTIVE_ECDSA_SIG_CHECKS = (
+    ecdsa_sig_checks.CheckECDSASignatureRange,
     ecdsa_sig_checks.CheckNonceReuse,
+    ecdsa_sig_checks.CheckNonceHalfHalf,
     ecdsa_sig_checks.CheckLCGNonceGMP,
     ecdsa_sig_checks.CheckLCGNonceJavaUtilRandom,
     ecdsa_sig_checks.CheckNonceMSB,

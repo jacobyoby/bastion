@@ -14,10 +14,14 @@
 """ECDSA Tests for paranoid_crypto.lib.paranoid."""
 
 import copy
+import hashlib
 import subprocess
 import sys
 from absl.testing import absltest
+import gmpy2 as gmpy
 from paranoid_crypto import paranoid_pb2
+from paranoid_crypto.lib import consts
+from paranoid_crypto.lib import ec_util
 from paranoid_crypto.lib import paranoid
 from paranoid_crypto.lib import paranoid_base_test
 from paranoid_crypto.lib import util
@@ -534,6 +538,19 @@ def _Secp256r1Sig(r: str, s: str, message_hash: str, x: str,
   return sig
 
 
+def _Secp256k1Sig(r: int, s: int, message_hash: bytes,
+                  q: tuple[int, int]) -> paranoid_pb2.ECDSASignature:
+  sig = paranoid_pb2.ECDSASignature()
+  sig.ecdsa_sig_info.algorithm = paranoid_pb2.SignatureAlgorithm.ECDSA_WITH_SHA256
+  sig.ecdsa_sig_info.r = util.Int2Bytes(r)
+  sig.ecdsa_sig_info.s = util.Int2Bytes(s)
+  sig.ecdsa_sig_info.message_hash = message_hash
+  sig.issuer_key_info.curve_type = paranoid_pb2.CurveType.CURVE_SECP256K1
+  sig.issuer_key_info.x = util.Int2Bytes(q[0])
+  sig.issuer_key_info.y = util.Int2Bytes(q[1])
+  return sig
+
+
 # Two signatures of one key with the same nonce k.
 _reuse_key_x = '775a7582a717bf46cbaf1f41c43ee0e6b78312a6359f61386e49ee92ef961a5f'
 _reuse_key_y = 'a93f36b2abcff4476bc4fe1a93a6deb191fe502c1271cf317905dc91b70e3460'
@@ -588,6 +605,96 @@ class ParanoidECDSATest(paranoid_base_test.ParanoidBaseTest):
     check = ecdsa_sig_checks.CheckCr50U2f()
     self.assertTrue(check.Check(bad_ecdsa_cr50u2f))
     self.assertResults(bad_ecdsa_cr50u2f, check.check_name, True)
+
+  def testCheckECDSASignatureRange(self):
+    n = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256R1].n
+    def WithValues(r, s):
+      sig = copy.deepcopy(good_ecdsa_secp256r1)
+      sig.ClearField('test_info')
+      sig.ecdsa_sig_info.r = util.Int2Bytes(r)
+      sig.ecdsa_sig_info.s = util.Int2Bytes(s)
+      return sig
+    good = WithValues(util.Bytes2Int(good_ecdsa_secp256r1.ecdsa_sig_info.r),
+                      util.Bytes2Int(good_ecdsa_secp256r1.ecdsa_sig_info.s))
+    # r = s = 0 verified for any message and key on Java 15 to 18
+    # (CVE-2022-21449). Values of n or more are out of range too.
+    out_of_range = [WithValues(0, 0), WithValues(0, 5), WithValues(n, 5),
+                    WithValues(5, n), WithValues(5, n + 3)]
+    in_range = [good, WithValues(1, n - 1), WithValues(n - 1, 1)]
+    check = ecdsa_sig_checks.CheckECDSASignatureRange()
+    self.assertTrue(check.Check(out_of_range + in_range))
+    self.assertResults(out_of_range, check.check_name, True)
+    self.assertResults(in_range, check.check_name, False)
+
+  def testCheckNonceHalfHalf(self):
+    # Each layout puts one half of the message hash z into one half of the
+    # nonce, and a fixed half of the private key d into the other half, as in
+    # the half-half Bitcoin nonces (ePrint 2023/841). Signatures use low-S.
+    curve = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256K1]
+    n, half = curve.n, curve.n.bit_length() // 2
+    low, high = lambda v: v % 2**half, lambda v: v >> half
+    layouts = {
+        'h_msb||d_msb': lambda z, d: high(z) * 2**half + high(d),
+        'h_lsb||d_msb': lambda z, d: low(z) * 2**half + high(d),
+        'd_msb||h_msb': lambda z, d: high(d) * 2**half + high(z),
+        'd_msb||h_lsb': lambda z, d: high(d) * 2**half + low(z),
+        'd_lsb||h_msb': lambda z, d: low(d) * 2**half + high(z),
+    }
+    for i, (name, nonce) in enumerate(layouts.items()):
+      with self.subTest(name):
+        d = int.from_bytes(hashlib.sha256(b'half-half %d' % i).digest(),
+                           'big') % n
+        q = curve.Multiply(curve.g, d)
+        sigs = []
+        for message in (b'first', b'second'):
+          digest = hashlib.sha256(message + name.encode()).digest()
+          z = curve.TransformOrderLen(util.Bytes2Int(digest), 256)
+          k = nonce(z, d)
+          r = curve.Multiply(curve.g, k)[0] % n
+          s = int(gmpy.invert(k, n)) * (z + r * d) % n
+          sigs.append(_Secp256k1Sig(r, min(s, n - s), digest, q))
+        check = ecdsa_sig_checks.CheckNonceHalfHalf()
+        self.assertTrue(check.Check(sigs))
+        self.assertResults(sigs, check.check_name, True)
+        self.assertEqual(
+            util.GetAttachedInfo(sigs[0].test_info,
+                                 consts.INFO_NAME_DISCRETE_LOG).value,
+            format(d, 'x'))
+    # Replacing s by n - s replaces k by -k. Every combination of signs for the
+    # two signatures of one key must still recover it. The solver is called
+    # directly: Check pairs signatures in set order, and swapping a pair swaps
+    # which sign combination it needs.
+    d = int.from_bytes(hashlib.sha256(b'half-half signs').digest(), 'big') % n
+    raw = []
+    for message in (b'first', b'second'):
+      digest = hashlib.sha256(message).digest()
+      z = curve.TransformOrderLen(util.Bytes2Int(digest), 256)
+      k = layouts['h_msb||d_msb'](z, d)
+      r = curve.Multiply(curve.g, k)[0] % n
+      raw.append((r, int(gmpy.invert(k, n)) * (z + r * d) % n, z))
+    for flip1 in (False, True):
+      for flip2 in (False, True):
+        with self.subTest(flip1=flip1, flip2=flip2):
+          (r1, s1, z1), (r2, s2, z2) = [
+              (r, n - s if flip else s, z)
+              for (r, s, z), flip in zip(raw, (flip1, flip2))]
+          self.assertIn(d, ecdsa_sig_checks._HalfHalfGuesses(
+              r1, s1, z1, r2, s2, z2, curve))
+    # Two signatures of one key with unrelated nonces are paired, and the key
+    # is not recovered.
+    d = int.from_bytes(hashlib.sha256(b'random nonces').digest(), 'big') % n
+    q = curve.Multiply(curve.g, d)
+    sigs = []
+    for message in (b'first', b'second'):
+      digest = hashlib.sha256(message).digest()
+      z = curve.TransformOrderLen(util.Bytes2Int(digest), 256)
+      k = int.from_bytes(hashlib.sha256(b'k' + message).digest(), 'big') % n
+      r = curve.Multiply(curve.g, k)[0] % n
+      sigs.append(_Secp256k1Sig(r, int(gmpy.invert(k, n)) * (z + r * d) % n,
+                                digest, q))
+    check = ecdsa_sig_checks.CheckNonceHalfHalf()
+    self.assertFalse(check.Check(sigs))
+    self.assertResults(sigs, check.check_name, False)
 
   def testCheckNonceReuse(self):
     check = ecdsa_sig_checks.CheckNonceReuse()
@@ -698,11 +805,19 @@ class ParanoidECDSATest(paranoid_base_test.ParanoidBaseTest):
       self.assertResults(good_ecdsa_sigs, ecdsa_check_name, False)
 
   def testCheckAllECDSASigsWithInvalidSignature(self):
-    # s = 0 is not a valid ECDSA signature and has no modular inverse.
+    # s = 0 is not a valid ECDSA signature and has no modular inverse. The
+    # nonce checks skip it without aborting the batch, and only the range check
+    # reports it.
     invalid_sig = copy.deepcopy(good_ecdsa_secp256r1)
+    invalid_sig.ClearField('test_info')
     invalid_sig.ecdsa_sig_info.s = util.Int2Bytes(0)
-    sigs = [invalid_sig, copy.deepcopy(good_ecdsa_secp256r1)]
-    self.assertFalse(paranoid.CheckAllECDSASigs(sigs))
+    good_sig = copy.deepcopy(good_ecdsa_secp256r1)
+    good_sig.ClearField('test_info')
+    self.assertTrue(paranoid.CheckAllECDSASigs([invalid_sig, good_sig]))
+    for check_name in paranoid.GetECDSAAllChecks():
+      self.assertResults([good_sig], check_name, False)
+      self.assertResults([invalid_sig], check_name,
+                         check_name == 'CheckECDSASignatureRange')
 
   def testImportBeforeParanoid(self):
     # This test module has already imported paranoid, so a fresh interpreter
