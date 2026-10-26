@@ -13,10 +13,12 @@
 # limitations under the License.
 """RSA Tests for paranoid_crypto.lib.paranoid."""
 
+import copy
 from absl.testing import absltest
 from paranoid_crypto import paranoid_pb2
 from paranoid_crypto.lib import paranoid
 from paranoid_crypto.lib import paranoid_base_test
+from paranoid_crypto.lib import short_sleeve
 from paranoid_crypto.lib import util
 from paranoid_crypto.lib.paranoid import rsa_aggregate_checks
 from paranoid_crypto.lib.paranoid import rsa_single_checks
@@ -213,6 +215,24 @@ bad_rsa_keypair3.rsa_info.n = util.Hex2Bytes(
 )
 bad_rsa_keys_keypair = [bad_rsa_keypair1, bad_rsa_keypair2, bad_rsa_keypair3]
 
+# Short-sleeve keys, from the appendix of
+# https://blog.trailofbits.com/2026/06/12/factoring-short-sleeve-rsa-keys-with-polynomials/
+# They are synthetic but follow the patterns found in the wild. The first has
+# zero blocks in 128-bit limbs, as in expired Yahoo and Verizon certificates.
+# The factors of the second came from CompleteFTP's genRandomBits(1024), which
+# fills each 32-bit limb with a single random byte.
+bad_rsa_short_sleeve_128 = paranoid_pb2.RSAKey()
+bad_rsa_short_sleeve_128.rsa_info.e = util.Hex2Bytes('010001')
+bad_rsa_short_sleeve_128.rsa_info.n = util.Hex2Bytes(
+    'c889f7ef523b08e400000000000000014d2ee8284c7a03c000000000000000012c16eeaeab96ddc8000000000000000201036d671407a06600000000000000022f743377005a840d0000000000000001e8e3c0efdd8054ba000000000000000306ee98c677dfdf190000000000000002de525d2b1011ceae0000000000000424455c59eec3a0654500000000000003f8d762d68bcbe8cc3a00000000000000d31291f9aaa7e9a7d60000000000000337a82a59342aadff570000000000000295c495b3690a69b66c00000000000000d9c5e55654e9b14cba000000000000040f0f0f7d3bfdce03d6000000000000026b89ac77db000000000000000000036a77'
+)
+bad_rsa_short_sleeve_32 = paranoid_pb2.RSAKey()
+bad_rsa_short_sleeve_32.rsa_info.e = util.Hex2Bytes('010001')
+bad_rsa_short_sleeve_32.rsa_info.n = util.Hex2Bytes(
+    '40000049000014ac8000900e00010ec58000b17b8001e0720001be890002169f80029cd5000349190003cd4480037c8c000397660003b28300041021000418cb00058a210004c2708004924980053b8780051cbd8005ebe80006bb27800765e6800651478007f62300073949800860950008614d800863988008d103800884c100099a260009a6d90009578f0007e84300080db800072e59000724f10007c0ec0006ec6600062231000605930005ca4c000566cc0005da92000574dd00040bf1000457dc0004cfbe0004c5640003fe6d0003ada60002de110002cbb30002d5a6000243840001cdf40001a8a9000151be000113f4000101070000acdf000029e5'
+)
+bad_rsa_keys_short_sleeve = [bad_rsa_short_sleeve_128, bad_rsa_short_sleeve_32]
+
 good_and_bad_rsa_keys = good_rsa_keys + bad_rsa_keys_size_exp
 
 
@@ -353,6 +373,29 @@ class ParanoidRSATest(paranoid_base_test.ParanoidBaseTest):
     self.assertTrue(check.Check(bad_rsa_keys_keypair))
     self.assertResults(bad_rsa_keys_keypair, check.check_name, True)
     self.assertFactors(bad_rsa_keys_keypair)
+
+  def testCheckShortSleeveRSA(self):
+    keys = copy.deepcopy(bad_rsa_keys_short_sleeve)
+    check = rsa_single_checks.CheckShortSleeveRSA()
+    self.assertTrue(check.Check(keys))
+    self.assertResults(keys, check.check_name, True)
+    self.assertFactors(keys)
+
+  def testShortSleeveWidths(self):
+    # The pre-filter picks the limb width to try, and nothing for other keys,
+    # so only short-sleeve candidates pay for polynomial factoring.
+    def Widths(key):
+      return short_sleeve.ShortSleeveWidths(util.Bytes2Int(key.rsa_info.n))
+    self.assertEqual(Widths(bad_rsa_short_sleeve_128), [128])
+    self.assertEqual(Widths(bad_rsa_short_sleeve_32), [32])
+    for key in good_rsa_keys + bad_rsa_keys_low_hamming_weight:
+      self.assertEqual(Widths(key), [])
+
+  def testShortSleeveRejectsTrivialFactor(self):
+    # A polynomial factor evaluating to a multiple of n gives gcd n, which is
+    # not a factorization.
+    n = util.Bytes2Int(bad_rsa_short_sleeve_128.rsa_info.n)
+    self.assertIsNone(short_sleeve._FactorFromValues([n, 3, 5, 7], n))
 
   def testCheckAllRSA(self):
     self.assertFalse(paranoid.CheckAllRSA(good_rsa_keys))

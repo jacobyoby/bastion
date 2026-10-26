@@ -85,6 +85,7 @@ CheckLowHammingWeight      | single key | `SEVERITY_CRITICAL`, or `SEVERITY_UNKN
 CheckUnseededRand          | single key | `SEVERITY_CRITICAL`                                       | yes
 CheckSmallUpperDifferences | single key | `SEVERITY_CRITICAL`                                       | yes
 CheckKeypairDenylist       | single key | `SEVERITY_CRITICAL`                                       | yes
+CheckShortSleeveRSA        | single key | `SEVERITY_CRITICAL`                                       | yes
 CheckGCD                   | aggregate  | `SEVERITY_CRITICAL`                                       | yes
 CheckGCDN1                 | aggregate  | `SEVERITY_UNKNOWN`                                        | no (attaches a GCD of $n - 1$)
 
@@ -385,6 +386,40 @@ forces two more bytes detects about 90.6%. The class docstring quotes the 90.6%
 figure for the default storage, but no such table is bundled. A larger table
 can be supplied through a `storage.Storage` passed to the constructor.
 
+### CheckShortSleeveRSA
+
+Checks whether both primes are "short-sleeve" [[ShortSleeve]]: their generator
+filled each $w$-bit limb of the big integer with fewer than $w$ random bits, so
+every limb has a block of zero bits. CompleteFTP 10.0.0 to 12.0.0 copied one
+random byte into each 32-bit limb, and Trail of Bits recovered 603 such RSA
+keys from internet scans. An unidentified generator left zero blocks in
+128-bit limbs; 26 such keys were found, including in expired certificates of
+Yahoo and Verizon.
+
+Written in base $2^w$, a short-sleeve prime is a polynomial $f_p(x)$ with small
+coefficients, evaluated at $x = 2^w$, and the digits of $n$ are then the
+coefficients of $f_p(x) f_q(x)$. Factoring that polynomial over the integers
+and evaluating its factors at $2^w$ gives $p$ and $q$. The zero blocks of $p$
+and $q$ need not line up with the limbs of $n$, so the check tries the digits
+of $n \cdot 2^k$ for every shift $k < w$. When the polynomial splits into more
+than two irreducible factors, products of them are tried as well (all subsets
+up to 16 factors, single factors beyond that). A key is flagged only when the
+gcd with $n$ is a proper factor.
+
+Polynomial factoring is slow compared with the other checks, so a pre-filter
+on the bits of $n$ decides which limb widths to try. A key is a candidate only
+if $\ell \ge 500$, fewer than 40% of the bits of $n$ and of its lower half are
+1, and bits 16 to 63 of every 128-bit limb, or bits 20 to 29 of every 32-bit
+limb, are 0 (the lowest limb, which a next-prime search can change, is
+skipped). The thresholds and masks follow the rsapoly detector of
+[badkeys][badkeysRsapoly]. On random 2048-bit keys the pre-filter takes about
+a microsecond and selects none. A key that passes it but does not factor costs
+about a second with 32-bit limbs.
+
+Only the two patterns above are tested. The check needs both primes to be
+short-sleeve; the DSA keys from the same CompleteFTP bug are not covered,
+since Bastion has no DSA key type.
+
 ### CheckGCD
 
 Checks whether two keys share a prime. If $n_1$ and $n_2$ share a prime $p$,
@@ -445,6 +480,8 @@ estimates and experiments suggest a value of about $2^{128}$.
 [GHSL-2021-1012]: https://securitylab.github.com/advisories/GHSL-2021-1012-keypair/ "GitHub Security Lab advisory GHSL-2021-1012"
 [keypair]: https://www.npmjs.com/package/keypair "keypair on npm"
 [keypairGenerator]: https://github.com/juliangruber/keypair/blob/master/index.js "keypair, index.js"
+[badkeysRsapoly]: https://github.com/badkeys/badkeys/blob/main/badkeys/rsakeys/rsapoly.py "badkeys, rsapoly.py"
+[ShortSleeve]: https://blog.trailofbits.com/2026/06/12/factoring-short-sleeve-rsa-keys-with-polynomials/ "K. Ryan, Factoring short-sleeve RSA keys with polynomials, Trail of Bits, 2026"
 [Lehman]: https://doi.org/10.1090/S0025-5718-1974-0340163-2 "R. S. Lehman, Factoring large integers, Math. Comp. 28 (1974), 637-646"
 [Nemec]: https://crocs.fi.muni.cz/public/papers/rsa_ccs17 "M. Nemec, M. Sys, P. Svenda, D. Klinec, V. Matyas, The Return of Coppersmith's Attack: Practical Factorization of Widely Used RSA Moduli, ACM CCS 2017"
 [primes32]: http://www.umopit.ru/CompLab/primes32eng.htm "All 32-bit prime numbers"

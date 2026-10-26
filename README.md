@@ -26,6 +26,9 @@ means that check found no weakness; it does not prove that a key or generator is
 
 ## Differences from upstream
 
+- **Short-sleeve RSA keys:** `CheckShortSleeveRSA` factors keys whose primes have
+  zero bits in every limb, such as those from old CompleteFTP versions. See the
+  [check details](docs/rsa_public_key_tests.md#checkshortsleeversa).
 - **RSA signature faults:** `CheckRSASignatureFault` factors the signer's key
   from one faulty PKCS#1 v1.5 signature. See the
   [check details](docs/rsa_signature_tests.md#checkrsasignaturefault).

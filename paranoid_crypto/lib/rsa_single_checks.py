@@ -25,6 +25,7 @@ from paranoid_crypto.lib import keypair_generator
 from paranoid_crypto.lib import ntheory_util
 from paranoid_crypto.lib import roca
 from paranoid_crypto.lib import rsa_util
+from paranoid_crypto.lib import short_sleeve
 from paranoid_crypto.lib import special_case_factoring
 from paranoid_crypto.lib import util
 from paranoid_crypto.lib.data import default_storage
@@ -547,6 +548,42 @@ class CheckSmallUpperDifferences(base_check.RSAKeyCheck):
         util.AttachFactors(key.test_info, consts.INFO_NAME_N_FACTORS, factors)
         any_weak = True
         test_result.result = True
+      util.SetTestResult(key.test_info, test_result)
+    return any_weak
+
+
+class CheckShortSleeveRSA(base_check.RSAKeyCheck):
+  """Factors "short-sleeve" keys, whose primes have zero bits in every limb.
+
+  A generator that fills each w-bit limb of a prime with fewer than w random
+  bits leaves a block of zeros in every limb. CompleteFTP 10.0.0 to 12.0.0 put
+  one random byte into each 32-bit limb, and an unidentified generator left
+  zero blocks in 128-bit limbs of certificates of Yahoo, Verizon and NetApp
+  devices. Such primes are polynomials with small coefficients, so the key
+  factors by factoring a polynomial (see short_sleeve.py).
+
+  A cheap pre-filter on the bits of n selects the candidates, so most keys cost
+  almost nothing. Only actual factorizations are reported.
+  """
+
+  def __init__(self):
+    super().__init__(paranoid_pb2.SeverityType.SEVERITY_CRITICAL)
+
+  def Check(self, artifacts: list[paranoid_pb2.RSAKey]) -> bool:
+    any_weak = False
+    for key in artifacts:
+      test_result = self._CreateTestResult()
+      n = gmpy.mpz(util.Bytes2Int(key.rsa_info.n))
+      for width in short_sleeve.ShortSleeveWidths(n):
+        factors = short_sleeve.FactorShortSleeve(n, width)
+        if factors:
+          logging.warning(
+              "Key factored! Factors: %s\n%s", factors, key.rsa_info
+          )
+          util.AttachFactors(key.test_info, consts.INFO_NAME_N_FACTORS, factors)
+          any_weak = True
+          test_result.result = True
+          break
       util.SetTestResult(key.test_info, test_result)
     return any_weak
 

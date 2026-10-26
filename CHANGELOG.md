@@ -15,6 +15,12 @@ Changes in Bastion since it forked from Google's
   first `RSASignatureCheck`. `paranoid.CheckAllRSASigs` and
   `paranoid.GetRSASignatureChecks` run it like the other artifact types. See
   [RSA signature tests](docs/rsa_signature_tests.md).
+- **Short-sleeve RSA keys.** `CheckShortSleeveRSA` factors keys whose primes
+  have a block of zero bits in every 32-bit limb (CompleteFTP 10.0.0 to 12.0.0)
+  or 128-bit limb (seen in Yahoo, Verizon and NetApp certificates), by
+  factoring a polynomial. A bit-mask pre-filter keeps the cost for other keys
+  under a microsecond. See
+  [RSA public key tests](docs/rsa_public_key_tests.md#checkshortsleeversa).
 - **ECDSA nonce reuse.** `CheckNonceReuse` recovers the private key from two
   signatures of one key that share r, whether they used the nonce k or n - k.
   See [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuse).
