@@ -400,6 +400,15 @@ Runs all EC key tests against the issuer public keys. For this check we set the
 default severity as UNKNOWN but when a signature has a weak issuer key, we
 assign the same severity of the key check that found the issuer key as weak.
 
+Each distinct issuer key is tested once. A key is its curve together with its
+encoded point, so the same coordinates on two curves are tested as two keys,
+and an unreduced encoding such as $x + p$ is tested apart from the reduced one,
+so that CheckValidECKey can report it.
+
+The nonce checks above identify issuer keys by their point reduced modulo $p$.
+Signatures whose issuer key is encoded unreduced are therefore grouped with the
+same key's other signatures, and a recovered private key still matches them.
+
 <!-- Literature -->
 
 [BoPeVe]: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.52.2547&rep=rep1&type=pdf "V. Boyko, M. Peinado, R. Venkatesan, Speeding up Discrete Log and Factoring Based Schemes via Precomputations"

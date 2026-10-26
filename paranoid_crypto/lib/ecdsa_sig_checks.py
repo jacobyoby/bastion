@@ -28,12 +28,23 @@ from paranoid_crypto.lib import util
 
 
 def _MapIssuerSigIndexes(
-    sigs: list[paranoid_pb2.ECDSASignature]
+    sigs: list[paranoid_pb2.ECDSASignature], curve: ec_util.EcCurve
 ) -> dict[tuple[int, int], list[int]]:
-  """Maps issuer points/public keys into signature indexes."""
+  """Maps issuer points/public keys into signature indexes.
+
+  Points are reduced modulo p, so an unreduced encoding of an issuer key is the
+  same key and matches the reduced points that guesses are checked against.
+
+  Args:
+    sigs: signatures whose issuer keys are on curve
+    curve: the EC curve of the issuer keys
+
+  Returns:
+    a dictionary, mapping reduced issuer points into signature indexes.
+  """
   pks = collections.defaultdict(list)
   for i, sig in enumerate(sigs):
-    pks[ec_util.PublicPoint(sig.issuer_key_info)].append(i)
+    pks[ec_util.ReducedPublicPoint(sig.issuer_key_info, curve)].append(i)
   return pks
 
 
@@ -146,7 +157,7 @@ class BiasedBaseCheck(base_check.ECDSASignatureCheck):
       sigs = [s for s in artifacts if s.issuer_key_info.curve_type == curve_id]
       if not sigs:
         continue
-      pks = _MapIssuerSigIndexes(sigs)
+      pks = _MapIssuerSigIndexes(sigs, curve)
       guesses = set()
       for _, idxs in pks.items():
         # Exclude duplicate signatures from the actual processing
@@ -266,7 +277,7 @@ class CheckNonceReuse(base_check.ECDSASignatureCheck):
       sigs = [s for s in artifacts if s.issuer_key_info.curve_type == curve_id]
       if not sigs:
         continue
-      pks = _MapIssuerSigIndexes(sigs)
+      pks = _MapIssuerSigIndexes(sigs, curve)
       guesses = set()
       for _, idxs in pks.items():
         sigs_by_r = collections.defaultdict(list)
@@ -309,16 +320,20 @@ class CheckIssuerKey(base_check.ECDSASignatureCheck):
     from paranoid_crypto.lib import paranoid  # pylint: disable=g-import-not-at-top
 
     any_weak = False
-    # Maps points/public keys into signature indexes to avoid duplicated keys:
+    # Maps public keys into signature indexes to avoid duplicated keys. A key
+    # is its curve and its encoded point: the same coordinates on two curves
+    # are two keys, and an unreduced encoding is kept apart so that
+    # CheckValidECKey can report it.
     points = {}
     # Actual ECKey protobufs, so we can provide to paranoid EC key checks:
     pks_pb = []
     for i, sig in enumerate(artifacts):
-      point = ec_util.PublicPoint(sig.issuer_key_info)
-      if point in points:
-        points[point].append(i)
+      key_id = (sig.issuer_key_info.curve_type,
+                ec_util.PublicPoint(sig.issuer_key_info))
+      if key_id in points:
+        points[key_id].append(i)
       else:
-        points[point] = [i]
+        points[key_id] = [i]
         pks_pb.append(paranoid_pb2.ECKey(ec_info=sig.issuer_key_info))
 
     # Test the keys. Results will be stored in the test_info protobuf field.
@@ -332,7 +347,8 @@ class CheckIssuerKey(base_check.ECDSASignatureCheck):
         any_weak = True
         test_result.result = True
         test_result.severity = util.GetHighestSeverity(key.test_info)
-      for i in points[ec_util.PublicPoint(key.ec_info)]:
+      for i in points[(key.ec_info.curve_type,
+                       ec_util.PublicPoint(key.ec_info))]:
         util.SetTestResult(artifacts[i].test_info, test_result)
     return any_weak
 
@@ -351,7 +367,7 @@ class CheckCr50U2f(base_check.ECDSASignatureCheck):
       sigs = [s for s in artifacts if s.issuer_key_info.curve_type == curve_id]
       if not sigs:
         continue
-      pks = _MapIssuerSigIndexes(sigs)
+      pks = _MapIssuerSigIndexes(sigs, curve)
       guesses = set()
       for _, idxs in pks.items():
         # Exclude duplicate signatures from the actual processing

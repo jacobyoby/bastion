@@ -924,6 +924,26 @@ def PublicPoint(key: paranoid_pb2.ECKeyInfo) -> tuple[int, int]:
   return (x, y)
 
 
+def ReducedPublicPoint(key: paranoid_pb2.ECKeyInfo,
+                       curve: EcCurve) -> tuple[int, int]:
+  """Returns the point of the public key with coordinates reduced modulo p.
+
+  An unreduced encoding such as x + p names the same point. Checks that
+  compute with the point use this form, so a weak key is found however it is
+  encoded; CheckValidECKey still reports the unreduced encoding.
+
+  Args:
+      key: An EC public key, a paranoid_pb2.ECKeyInfo protobuf containing the x
+        and y attributes.
+      curve: EcCurve of the key.
+
+  Returns:
+    A tuple with the x and y coordinate of the public point, each in [0, p).
+  """
+  x, y = PublicPoint(key)
+  return (x % curve.mod, y % curve.mod)
+
+
 def ECDSAValues(
     sig: paranoid_pb2.ECDSASignatureInfo, curve: EcCurve
 ) -> tuple[int, int, int]:

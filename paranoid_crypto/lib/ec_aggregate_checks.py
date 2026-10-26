@@ -47,8 +47,16 @@ class CheckECKeySmallDifference(base_check.ECKeyCheck):
       # significantly faster when keys are checked in batches, rather than
       # individually.
       keys = [key for key in artifacts if key.ec_info.curve_type == curve_id]
-      points = [ec_util.PublicPoint(key.ec_info) for key in keys]
-      result = curve.BatchDLOfDifferences(points, max_diff=self._max_diff)
+      # Only valid public keys have private keys to relate. The addition
+      # formulas do not use the curve coefficient b, so points off the curve
+      # can show a small "difference" that relates no private keys.
+      # CheckValidECKey reports such points.
+      points = [ec_util.ReducedPublicPoint(key.ec_info, curve) for key in keys]
+      valid = [i for i, p in enumerate(points) if curve.IsValidPublicKey(p)]
+      result = [None] * len(keys)
+      for i, diff in zip(valid, curve.BatchDLOfDifferences(
+          [points[i] for i in valid], max_diff=self._max_diff)):
+        result[i] = diff
       for i, key in enumerate(keys):
         test_result = self._CreateTestResult()
         if result[i] is not None:

@@ -31,10 +31,12 @@ means that check found no weakness; it does not prove that a key or generator is
 - **More robust input handling:** empty batches, tiny or empty RSA moduli,
   out-of-range ECDSA signature values, and invalid EC points with `y = 0 (mod p)`
   are reported or skipped rather than aborting a batch.
--   **CheckWeakECPrivateKey searches only valid points**: a point off the curve
-    is no longer reported as a recovered private key, and a weak key encoded
-    with unreduced coordinates is still found. See
-    [EC public key tests](docs/ec_public_key_tests.md#checkvalideckey).
+- **Invalid and unreduced EC points:** `CheckWeakECPrivateKey` and
+  `CheckECKeySmallDifference` work only with valid points, so points off the
+  curve are no longer reported as recovered or related private keys. A weak key
+  encoded with unreduced coordinates is still found, including as the issuer of
+  ECDSA signatures, and `CheckIssuerKey` tests the same coordinates on two curves
+  as two keys. See the [check details](docs/ec_public_key_tests.md#checkvalideckey).
 - **Flexible import order:** `paranoid_crypto.lib.ecdsa_sig_checks` can be imported
   before `paranoid_crypto.lib.paranoid`.
 

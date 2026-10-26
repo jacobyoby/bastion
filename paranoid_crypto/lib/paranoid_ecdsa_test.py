@@ -599,6 +599,69 @@ class ParanoidECDSATest(paranoid_base_test.ParanoidBaseTest):
     single = copy.deepcopy(bad_ecdsa_nonce_reuse[0])
     self.assertFalse(check.Check([single]))
 
+  def testCheckNonceReuseUnreducedIssuerKey(self):
+    # One signer's key is encoded reduced in one signature, with x + p in the
+    # second and with y + p in the third. They are one key, so the shared
+    # nonce must be found and every signature flagged.
+    reduced, x_unreduced = copy.deepcopy(bad_ecdsa_nonce_reuse)
+    y_unreduced = copy.deepcopy(x_unreduced)
+    mod = 2**256 - 2**224 + 2**192 + 2**96 - 1  # secp256r1 field prime
+    x = util.Bytes2Int(x_unreduced.issuer_key_info.x)
+    x_unreduced.issuer_key_info.x = util.Int2Bytes(x + mod)
+    y = util.Bytes2Int(y_unreduced.issuer_key_info.y)
+    y_unreduced.issuer_key_info.y = util.Int2Bytes(y + mod)
+    sigs = [reduced, x_unreduced, y_unreduced]
+    for sig in sigs:
+      sig.ClearField('test_info')  # Do not inherit results of other tests.
+    check = ecdsa_sig_checks.CheckNonceReuse()
+    self.assertTrue(check.Check(sigs))
+    self.assertResults(sigs, check.check_name, True)
+
+  def testCheckIssuerKeySameCoordinatesOnTwoCurves(self):
+    # Two issuer keys with the same coordinates on different curves are
+    # different keys. The secp256k1 copy is not on that curve, so it is
+    # invalid and its signature must be flagged.
+    valid_sig = copy.deepcopy(good_ecdsa_secp256r1)
+    other_curve_sig = copy.deepcopy(good_ecdsa_secp256r1)
+    other_curve_sig.issuer_key_info.curve_type = (
+        paranoid_pb2.CurveType.CURVE_SECP256K1)
+    check = ecdsa_sig_checks.CheckIssuerKey()
+    self.assertTrue(check.Check([valid_sig, other_curve_sig]))
+    self.assertResults([valid_sig], check.check_name, False)
+    self.assertResults([other_curve_sig], check.check_name, True)
+
+  def testCheckIssuerKeyTestsUnreducedEncodingApart(self):
+    # An issuer key encoded with x + p is invalid as encoded, so its signature
+    # must be flagged, in either order, without flagging the signature that
+    # carries the reduced encoding of the same key.
+    mod = 2**256 - 2**224 + 2**192 + 2**96 - 1  # secp256r1 field prime
+    for unreduced_first in (False, True):
+      reduced_sig = copy.deepcopy(good_ecdsa_secp256r1)
+      unreduced_sig = copy.deepcopy(good_ecdsa_secp256r1)
+      x = util.Bytes2Int(unreduced_sig.issuer_key_info.x)
+      unreduced_sig.issuer_key_info.x = util.Int2Bytes(x + mod)
+      for sig in (reduced_sig, unreduced_sig):
+        sig.ClearField('test_info')
+      sigs = ([unreduced_sig, reduced_sig] if unreduced_first
+              else [reduced_sig, unreduced_sig])
+      check = ecdsa_sig_checks.CheckIssuerKey()
+      self.assertTrue(check.Check(sigs))
+      self.assertResults([reduced_sig], check.check_name, False)
+      self.assertResults([unreduced_sig], check.check_name, True)
+
+  def testCheckCr50U2fUnreducedIssuerKey(self):
+    # Every nonce check groups issuer keys through the same reduced points, so
+    # Cr50 signatures whose issuer keys are encoded with x + p are still found.
+    sigs = copy.deepcopy(bad_ecdsa_cr50u2f)
+    mod = 2**256 - 2**224 + 2**192 + 2**96 - 1  # secp256r1 field prime
+    for sig in sigs:
+      x = util.Bytes2Int(sig.issuer_key_info.x)
+      sig.issuer_key_info.x = util.Int2Bytes(x + mod)
+      sig.ClearField('test_info')
+    check = ecdsa_sig_checks.CheckCr50U2f()
+    self.assertTrue(check.Check(sigs))
+    self.assertResults(sigs, check.check_name, True)
+
   def testCheckLCGNonceGMP(self):
     check = ecdsa_sig_checks.CheckLCGNonceGMP()
     self.assertTrue(check.Check(bad_ecdsa_lcg_gmp))

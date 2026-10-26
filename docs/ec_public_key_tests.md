@@ -106,14 +106,12 @@ equation modulo $p$, so it passes requirement 1.
 
 A failure does not stop the other checks, and a malformed point does not abort
 the run. A key on a supported curve with an invalid point still goes through
-CheckWeakCurve, CheckWeakECPrivateKey and CheckECKeySmallDifference.
-CheckWeakECPrivateKey first reduces both coordinates modulo $p$ and searches
-only points that are then valid. A point that is not on the curve has no
-private key and passes that check; this includes a point with $y = 0$, such as
-a key whose coordinates are both unset. An unreduced encoding of a valid point,
-such as $x + p$, is searched as the point it encodes, so a weak private key is
-still found. The results of CheckECKeySmallDifference for an invalid key are not
-reliable, so treat a key that fails CheckValidECKey as an invalid key first.
+CheckWeakCurve, CheckWeakECPrivateKey and CheckECKeySmallDifference. The last
+two first reduce both coordinates modulo $p$ and work only with points that are
+then valid. A point that is not on the curve has no private key, so it passes
+both; this includes a point with $y = 0$, such as a key whose coordinates are
+both unset. An unreduced encoding of a valid point, such as $x + p$, is treated
+as the point it encodes, so a weak private key is still found.
 
 ### CheckWeakCurve
 
@@ -205,12 +203,17 @@ computes the x-coordinates of its differences to all earlier keys on the same
 curve in one batch addition. It looks each one up in the table and confirms
 every hit by computing $kG$. Both keys of a matching pair fail. Each gets a
 `DISCRETE_LOG_DIFF` entry in `test_info.attached_info` of the form
-`key - (x, y) = k * G`, where `(x, y)` is the other key in hexadecimal and `k`
-is in decimal. A key close to several others records only one of them. For $N$
+`key - (x, y) = k * G`, where `(x, y)` is the other key's point in hexadecimal,
+reduced modulo $p$ (so it can differ from the bytes that key was submitted
+with), and `k` is in decimal. A key close to several others records only one of them. For $N$
 keys on one curve the cost is $O(2^{24} + N^2 / 2)$.
 
-The check compares only keys that are passed in the same call and are on the
-same curve. Keys checked in separate calls are never compared. A key that is
+The check compares only valid keys, after reducing their coordinates modulo $p$
+as described under [CheckValidECKey](#checkvalideckey). This matters because
+the addition formulas do not use the curve coefficient $b$: for a point $q$ off
+the curve, the point $p$ computed as $q + 5G$ with those formulas satisfies
+$p - q = 5G$, although neither has a private key. The check compares only keys
+that are passed in the same call and are on the same curve. Keys checked in separate calls are never compared. A key that is
 alone on its curve has nothing to compare against: it passes, and the check
 builds no table for that curve. The bound $2^{24}$ is the default of the
 `max_diff` constructor argument, and `CheckAllEC` uses that default.

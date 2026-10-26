@@ -134,8 +134,7 @@ class CheckWeakECPrivateKey(base_check.ECKeyCheck):
       # while a point off the curve (e.g. y = 0, which doubles to infinity and
       # would give a discrete log of 0) is never reported. CheckValidECKey
       # reports both kinds of encoding.
-      points = [tuple(c % curve.mod for c in ec_util.PublicPoint(key.ec_info))
-                for key in keys]
+      points = [ec_util.ReducedPublicPoint(key.ec_info, curve) for key in keys]
       valid = [i for i, p in enumerate(points) if curve.IsValidPublicKey(p)]
       discrete_logs = [None] * len(keys)
       if valid:

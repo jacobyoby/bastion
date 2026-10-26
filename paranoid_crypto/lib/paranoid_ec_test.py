@@ -228,6 +228,30 @@ class ParanoidECTest(paranoid_base_test.ParanoidBaseTest):
     self.assertFalse(check.Check([bad_ec_key_diff1, bad_ec_key_diff1]))
     self.assertTrue(check.Check(ec_keys_small_difference))
 
+  def testCheckECKeySmallDifferenceIgnoresPointsOffCurve(self):
+    # The addition formulas do not use the curve coefficient b, so for a point
+    # q off the curve, q + 5G computed with them differs from q by 5G. Neither
+    # point has a private key, so no difference may be reported. The batch
+    # interleaves them with a real pair, a = 5G (encoded with x + p) and
+    # b = 12G, which must still be found.
+    curve = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256R1]
+    q = (12345, 67890)
+    a = curve.Multiply(curve.g, 5)
+    points = [q, (a[0] + curve.mod, a[1]),
+              curve.Add(q, curve.Multiply(curve.g, 5)),
+              curve.Multiply(curve.g, 12)]
+    keys = []
+    for x, y in points:
+      key = paranoid_pb2.ECKey()
+      key.ec_info.curve_type = paranoid_pb2.CurveType.CURVE_SECP256R1
+      key.ec_info.x = util.Int2Bytes(x)
+      key.ec_info.y = util.Int2Bytes(y)
+      keys.append(key)
+    check = ec_aggregate_checks.CheckECKeySmallDifference(max_diff=2**8)
+    self.assertTrue(check.Check(keys))
+    self.assertResults([keys[0], keys[2]], check.check_name, False)
+    self.assertResults([keys[1], keys[3]], check.check_name, True)
+
   def testCheckAllEC(self):
     self.assertFalse(paranoid.CheckAllEC(good_ec_keys))
     for ec_check_name in paranoid.GetECAllChecks():
