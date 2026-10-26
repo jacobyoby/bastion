@@ -606,6 +606,81 @@ class ParanoidECDSATest(paranoid_base_test.ParanoidBaseTest):
     self.assertTrue(check.Check(bad_ecdsa_cr50u2f))
     self.assertResults(bad_ecdsa_cr50u2f, check.check_name, True)
 
+  def _Sign(self, d: int, k: int, message: bytes,
+            flip: bool) -> paranoid_pb2.ECDSASignature:
+    """Signs with private key d and nonce k on secp256k1; flip uses n - s."""
+    curve = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256K1]
+    n = curve.n
+    digest = hashlib.sha256(message).digest()
+    z = curve.TransformOrderLen(util.Bytes2Int(digest), 256)
+    r = curve.Multiply(curve.g, k)[0] % n
+    s = int(gmpy.invert(k, n)) * (z + r * d) % n
+    return _Secp256k1Sig(r, n - s if flip else s, digest,
+                         curve.Multiply(curve.g, d))
+
+  def _Secret(self, label: bytes) -> int:
+    n = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256K1].n
+    return int.from_bytes(hashlib.sha256(label).digest(), 'big') % n
+
+  def testCheckNonceReuseAcrossKeysSharedNonce(self):
+    # One nonce under two keys: two equations, three unknowns. The keys are
+    # not recovered, but the shared nonce is reported.
+    d_a, d_b, k = (self._Secret(b'A'), self._Secret(b'B'),
+                   self._Secret(b'k shared'))
+    sigs = [self._Sign(d_a, k, b'a1', False), self._Sign(d_b, k, b'b1', True)]
+    check = ecdsa_sig_checks.CheckNonceReuseAcrossKeys()
+    self.assertTrue(check.Check(sigs))
+    self.assertResults(sigs, check.check_name, True)
+    self.assertSeverities(sigs, check.check_name,
+                          paranoid_pb2.SeverityType.SEVERITY_HIGH)
+    for sig in sigs:
+      self.assertIsNone(
+          util.GetAttachedInfo(sig.test_info, consts.INFO_NAME_DISCRETE_LOG))
+
+  def testCheckNonceReuseAcrossKeysCycle(self):
+    # Two keys sharing two nonces: four equations, four unknowns. One
+    # signature is low-S normalized, which negates its nonce.
+    d_a, d_b = self._Secret(b'cycle A'), self._Secret(b'cycle B')
+    k1, k2 = self._Secret(b'cycle k1'), self._Secret(b'cycle k2')
+    sigs = [self._Sign(d_a, k1, b'a1', False), self._Sign(d_a, k2, b'a2', False),
+            self._Sign(d_b, k1, b'b1', True), self._Sign(d_b, k2, b'b2', False)]
+    check = ecdsa_sig_checks.CheckNonceReuseAcrossKeys()
+    self.assertTrue(check.Check(sigs))
+    self.assertResults(sigs, check.check_name, True)
+    self.assertSeverities(sigs, check.check_name,
+                          paranoid_pb2.SeverityType.SEVERITY_CRITICAL)
+    for sig, d in zip(sigs, (d_a, d_a, d_b, d_b)):
+      self.assertEqual(
+          util.GetAttachedInfo(sig.test_info,
+                               consts.INFO_NAME_DISCRETE_LOG).value,
+          format(d, 'x'))
+
+  def testCheckNonceReuseAcrossKeysPropagation(self):
+    # Key A reuses k1 itself, which reveals A. A's signature with k2 then
+    # reveals k2, and so key B, which signed once with k2.
+    d_a, d_b = self._Secret(b'prop A'), self._Secret(b'prop B')
+    k1, k2 = self._Secret(b'prop k1'), self._Secret(b'prop k2')
+    sigs = [self._Sign(d_a, k1, b'a1', False), self._Sign(d_a, k1, b'a2', True),
+            self._Sign(d_a, k2, b'a3', False), self._Sign(d_b, k2, b'b1', False)]
+    check = ecdsa_sig_checks.CheckNonceReuseAcrossKeys()
+    self.assertTrue(check.Check(sigs))
+    self.assertEqual(
+        util.GetAttachedInfo(sigs[3].test_info,
+                             consts.INFO_NAME_DISCRETE_LOG).value,
+        format(d_b, 'x'))
+
+  def testCheckNonceReuseAcrossKeysNegative(self):
+    # Distinct nonces, and nonce reuse within one key only (that is
+    # CheckNonceReuse's job), are not reported by this check.
+    d_a, d_b = self._Secret(b'neg A'), self._Secret(b'neg B')
+    distinct = [self._Sign(d_a, self._Secret(b'k1'), b'a1', False),
+                self._Sign(d_b, self._Secret(b'k2'), b'b1', False)]
+    k = self._Secret(b'k same key')
+    same_key = [self._Sign(d_a, k, b'a1', False), self._Sign(d_a, k, b'a2', False)]
+    check = ecdsa_sig_checks.CheckNonceReuseAcrossKeys()
+    self.assertFalse(check.Check(distinct + same_key))
+    self.assertResults(distinct + same_key, check.check_name, False)
+
   def testCheckECDSASignatureRange(self):
     n = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256R1].n
     def WithValues(r, s):

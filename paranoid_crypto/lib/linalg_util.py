@@ -159,3 +159,37 @@ def solve_right(a: list[list[int]], b: list[int]) -> Optional[list[gmpy.mpq]]:
   if rank != ncols:
     return None  # Not enough linear independent rows/equations
   return upper_triangular_solve(a[:rank], b[:rank])
+
+
+def solve_mod(a: list[list[int]], b: list[int], p: int) -> Optional[list[int]]:
+  """Returns the unique solution x of a * x = b (mod p), for a prime p.
+
+  Uses Gaussian elimination over the field of integers modulo p.
+
+  Args:
+    a: the coefficient matrix, with one row per equation
+    b: the right-hand side, with one entry per equation
+    p: a prime modulus
+
+  Returns:
+    the solution as a list of integers in [0, p), or None if the system has
+    no solution or more than one.
+  """
+  cols = len(a[0])
+  rows = [[v % p for v in row] + [rhs % p] for row, rhs in zip(a, b)]
+  pivot = 0
+  for c in range(cols):
+    found = next((i for i in range(pivot, len(rows)) if rows[i][c]), None)
+    if found is None:
+      return None  # Column c is a free variable.
+    rows[pivot], rows[found] = rows[found], rows[pivot]
+    inverse = int(gmpy.invert(rows[pivot][c], p))
+    rows[pivot] = [v * inverse % p for v in rows[pivot]]
+    for i, row in enumerate(rows):
+      if i != pivot and row[c]:
+        f = row[c]
+        rows[i] = [(v - f * w) % p for v, w in zip(row, rows[pivot])]
+    pivot += 1
+  if any(row[cols] for row in rows[pivot:]):
+    return None  # Inconsistent: a remaining row reads 0 = nonzero.
+  return [rows[i][cols] for i in range(cols)]

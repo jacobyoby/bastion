@@ -38,6 +38,10 @@ means that check found no weakness; it does not prove that a key or generator is
 - **RSA signature faults:** `CheckRSASignatureFault` factors the signer's key
   from one faulty PKCS#1 v1.5 signature. See the
   [check details](docs/rsa_signature_tests.md#checkrsasignaturefault).
+- **ECDSA nonce reuse across keys:** `CheckNonceReuseAcrossKeys` reports
+  different keys sharing a nonce, and recovers them when the shared nonces form
+  a cycle. See the
+  [check details](docs/ecdsa_signature_tests.md#checknoncereuseacrosskeys).
 - **Half-half ECDSA nonces:** `CheckNonceHalfHalf` recovers a private key from
   two signatures whose nonces mix the message hash with half of the key. See
   the [check details](docs/ecdsa_signature_tests.md#checknoncehalfhalf).

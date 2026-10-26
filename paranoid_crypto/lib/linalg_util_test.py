@@ -115,6 +115,18 @@ class LinAlgUtilTest(absltest.TestCase):
     x = linalg_util.solve_right(a, b)
     self.assertEqual(x, res)
 
+  def testSolveMod(self):
+    p = 101
+    # 3x + y = 7, x + 2y = 9 (mod 101) has the unique solution x = 1, y = 4.
+    self.assertEqual(linalg_util.solve_mod([[3, 1], [1, 2]], [7, 9], p), [1, 4])
+    # A third, consistent equation keeps it; an inconsistent one has none.
+    self.assertEqual(
+        linalg_util.solve_mod([[3, 1], [1, 2], [4, 3]], [7, 9, 16], p), [1, 4])
+    self.assertIsNone(
+        linalg_util.solve_mod([[3, 1], [1, 2], [4, 3]], [7, 9, 17], p))
+    # One equation in two unknowns has many solutions.
+    self.assertIsNone(linalg_util.solve_mod([[3, 1]], [7], p))
+
 
 if __name__ == '__main__':
   absltest.main()

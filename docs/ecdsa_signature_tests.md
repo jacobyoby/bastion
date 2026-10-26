@@ -242,6 +242,32 @@ same nonce many times.
 This flaw broke the PlayStation 3 signing key [[PS3]] and let attackers take
 coins from Android Bitcoin wallets in 2013 [[AndroidRNG]].
 
+### CheckNonceReuseAcrossKeys
+
+Checks whether signatures of *different* keys share a nonce. The same $r$
+under two keys means the same $k$ (or $-k$): a random collision has
+probability about $2^{-256}$, so the signers share a broken random number
+generator, for example a cloned virtual machine or device image. One shared
+nonce gives two equations, $s_1 k = z_1 + r x_1$ and $s_2 (\pm k) = z_2 + r
+x_2$, in three unknowns, so no key follows from it alone. Such signatures are
+reported at `SEVERITY_HIGH`.
+
+Keys and shared nonces form a graph [[BrengelRossow]]. Each signature is an
+edge between its key and its nonce, and gives one linear equation
+$s (\pm k) - r x = z \pmod{n}$. A connected component with a cycle, such as two
+keys that share two nonces or a key that also reused a nonce with itself, has
+at least as many equations as unknowns, and determines every key in it, since
+each further edge adds one equation and one unknown. The check solves each
+such component modulo $n$ for every assignment of nonce signs (low-S
+normalization can replace $k$ by $-k$), confirms each solved key against its
+public key, and reports those keys' signatures at `SEVERITY_CRITICAL` with
+their discrete log. Brengel and Rossow found 23 such cycles on the Bitcoin
+blockchain and leaked 2,537 of the 4,433 keys that used a duplicate $r$.
+
+A component whose signatures need more than 10 sign choices (2^10 systems)
+is reported but not solved. Nonce reuse within one key alone is left to
+[CheckNonceReuse](#checknoncereuse).
+
 ### CheckNonceHalfHalf
 
 Checks whether the nonces are "half-half": one half of $k$ is a half of the
@@ -461,6 +487,7 @@ same key's other signatures, and a recovered private key still matches them.
 [U2f]: https://www.chromium.org/chromium-os/u2f-ecdsa-vulnerability/ "U2F ECDSA vulnerability"
 [PS3]: https://fahrplan.events.ccc.de/congress/2010/Fahrplan/events/4087.en.html "fail0verflow, Console Hacking 2010, 27C3"
 [AndroidRNG]: https://bitcoin.org/en/alert/2013-08-11-android "Android Security Vulnerability"
+[BrengelRossow]: https://christian-rossow.de/publications/btcsteal-raid2018.pdf "M. Brengel, C. Rossow, Identifying Key Leakage of Bitcoin Users, RAID 2018"
 [CVE-2022-21449]: https://nvd.nist.gov/vuln/detail/CVE-2022-21449 "NVD, CVE-2022-21449"
 [Kudelski]: https://kudelskisecurity.com/research/lattice-free-half-half-attack-on-bitcoin-and-ethereum "Kudelski Security, Lattice-free half-half attack on Bitcoin and Ethereum"
 [PsychicSignatures]: https://neilmadden.blog/2022/04/19/psychic-signatures-in-java/ "N. Madden, Psychic Signatures in Java, 2022"

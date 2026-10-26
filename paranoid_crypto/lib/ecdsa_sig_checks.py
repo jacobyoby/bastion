@@ -14,6 +14,7 @@
 """Module containing Paranoid checks for ECDSA signatures."""
 
 import collections
+import itertools
 from typing import Optional
 from absl import logging
 import gmpy2 as gmpy
@@ -24,6 +25,7 @@ from paranoid_crypto.lib import cr50_u2f_weakness
 from paranoid_crypto.lib import ec_util
 from paranoid_crypto.lib import hidden_number_problem as hnp
 from paranoid_crypto.lib import lcg_constants
+from paranoid_crypto.lib import linalg_util
 from paranoid_crypto.lib import util
 
 
@@ -149,6 +151,82 @@ def _HalfHalfGuesses(r1: int, s1: int, z1: int, r2: int, s2: int, z2: int,
       if den == 0:
         continue
       guesses.add(int((df - sign1 * a1 + sign2 * a2) * gmpy.invert(den, n) % n))
+  return guesses
+
+
+# A signature with (key, r, s, z): the reduced issuer point, and the values of
+# the signature.
+_SigEntry = tuple[tuple[int, int], int, int, int]
+
+# Each signature after the first with a given r may use -k instead of k, so a
+# component with m such signatures has 2^m sign assignments to solve. Larger
+# components are reported as sharing nonces but not solved.
+_MAX_FREE_SIGNS = 10
+
+
+def _NonceComponents(entries: list[_SigEntry]) -> list[list[_SigEntry]]:
+  """Groups signatures into components connected by shared keys and nonces."""
+  parent = {}
+
+  def Find(x):
+    parent.setdefault(x, x)
+    while parent[x] != x:
+      parent[x] = parent[parent[x]]
+      x = parent[x]
+    return x
+
+  for key, r, _, _ in entries:
+    parent[Find(("key", key))] = Find(("r", r))
+  components = collections.defaultdict(list)
+  for entry in entries:
+    components[Find(("r", entry[1]))].append(entry)
+  return list(components.values())
+
+
+def _SolveNonceComponent(component: list[_SigEntry], n: int) -> set[int]:
+  """Returns private key guesses from a component of shared-nonce signatures.
+
+  The unknowns are the private key d of each key and one nonce k per distinct
+  r; each signature gives the linear equation s * (+-k) - r * d = z (mod n).
+  With at least as many signatures as unknowns, which requires a cycle of
+  keys and nonces, the system is solved for every sign assignment. A
+  component that forms a tree has fewer equations than unknowns and gives
+  nothing.
+
+  Args:
+    component: signatures connected by shared nonces
+    n: order of the EC group
+
+  Returns:
+    the solved private keys, to be confirmed against the public keys.
+  """
+  keys = sorted({key for key, _, _, _ in component})
+  nonces = sorted({r for _, r, _, _ in component})
+  if len(component) < len(keys) + len(nonces):
+    return set()
+  column = {("key", key): j for j, key in enumerate(keys)}
+  column.update({("r", r): len(keys) + j for j, r in enumerate(nonces)})
+  # The first signature with each r fixes the sign of that nonce.
+  seen, free = set(), []
+  for i, (_, r, _, _) in enumerate(component):
+    if r in seen:
+      free.append(i)
+    seen.add(r)
+  if len(free) > _MAX_FREE_SIGNS:
+    return set()
+  guesses = set()
+  for signs in itertools.product((1, -1), repeat=len(free)):
+    sign = dict(zip(free, signs))
+    a, b = [], []
+    for i, (key, r, s, z) in enumerate(component):
+      row = [0] * len(column)
+      row[column[("r", r)]] = sign.get(i, 1) * s
+      row[column[("key", key)]] = -r
+      a.append(row)
+      b.append(z)
+    solution = linalg_util.solve_mod(a, b, n)
+    if solution is not None:
+      guesses.update(solution[:len(keys)])
   return guesses
 
 
@@ -346,6 +424,67 @@ class CheckNonceReuse(base_check.ECDSASignatureCheck):
           util.AttachInfo(sig.test_info, consts.INFO_NAME_DISCRETE_LOG, dlog)
           any_weak = True
           test_result.result = True
+        util.SetTestResult(sig.test_info, test_result)
+    return any_weak
+
+
+class CheckNonceReuseAcrossKeys(base_check.ECDSASignatureCheck):
+  """Checks whether signatures of different keys share a nonce.
+
+  The same r under two keys means the same nonce k (or -k): a random collision
+  has probability about 2^-256, so the signers share a broken random number
+  generator, for example a cloned VM or device image. One shared nonce gives
+  two equations in three unknowns, so such signatures are reported at
+  SEVERITY_HIGH without a key. When keys and shared nonces form a cycle, for
+  example two keys that share two nonces, or a key that also reused a nonce
+  with itself, the linear system determines the keys. Recovered keys are
+  confirmed against the issuer keys and reported at SEVERITY_CRITICAL with
+  their discrete log. Nonce reuse within one key alone is left to
+  CheckNonceReuse.
+  """
+
+  def __init__(self):
+    super().__init__(paranoid_pb2.SeverityType.SEVERITY_CRITICAL)
+
+  def Check(self, artifacts: list[paranoid_pb2.ECDSASignature]) -> bool:
+    any_weak = False
+    for curve_id, curve in ec_util.CURVE_FACTORY.items():
+      if curve is None:
+        continue
+      sigs = [s for s in artifacts if s.issuer_key_info.curve_type == curve_id]
+      if not sigs:
+        continue
+      pks = _MapIssuerSigIndexes(sigs, curve)
+      entries = [(key, r, s, z) for key, idxs in pks.items()
+                 for r, s, z in _UniqueValidECDSAValues(sigs, idxs, curve)]
+      keys_by_r = collections.defaultdict(set)
+      for key, r, _, _ in entries:
+        keys_by_r[r].add(key)
+      shared = {r for r, keys in keys_by_r.items() if len(keys) > 1}
+      sigs_per_r = collections.Counter(r for _, r, _, _ in entries)
+      linked = [e for e in entries if sigs_per_r[e[1]] > 1]
+      guesses = set()
+      for component in _NonceComponents(linked):
+        if any(r in shared for _, r, _, _ in component):
+          guesses.update(_SolveNonceComponent(component, curve.n))
+      issuer_dlogs = _IssuerDLogs(list(guesses), pks, curve)
+      # Store the test results
+      for i, sig in enumerate(sigs):
+        test_result = self._CreateTestResult()
+        if i in issuer_dlogs:
+          dlog = format(int(issuer_dlogs[i]), "x")
+          logging.warning("Check nonce reuse across keys failed. Issuer dlog "
+                          "found: %s %s", dlog, sig.ecdsa_sig_info)
+          util.AttachInfo(sig.test_info, consts.INFO_NAME_DISCRETE_LOG, dlog)
+          any_weak = True
+          test_result.result = True
+        elif (util.Bytes2Int(sig.ecdsa_sig_info.r) in shared and
+              0 < util.Bytes2Int(sig.ecdsa_sig_info.s) < curve.n):
+          logging.warning("Nonce shared with another key: %s",
+                          sig.ecdsa_sig_info)
+          any_weak = True
+          test_result.result = True
+          test_result.severity = paranoid_pb2.SeverityType.SEVERITY_HIGH
         util.SetTestResult(sig.test_info, test_result)
     return any_weak
 

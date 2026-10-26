@@ -34,6 +34,11 @@ Changes in Bastion since it forked from Google's
   bits: 688,128 new entries computed from badkeys/debianopenssl (CC0) and
   stored lzma-compressed. See
   [RSA public key tests](docs/rsa_public_key_tests.md#checkopenssldenylist).
+- **ECDSA nonce reuse across keys.** `CheckNonceReuseAcrossKeys` reports
+  signatures of different keys that share r, and recovers the keys when keys
+  and shared nonces form a cycle, by solving the linear system modulo n for
+  every assignment of nonce signs. Adds `linalg_util.solve_mod`. See
+  [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuseacrosskeys).
 - **Half-half ECDSA nonces.** `CheckNonceHalfHalf` recovers the private key
   from two signatures whose nonces combine half of the message hash with a
   fixed half of the private key, a flaw that cost Bitcoin users funds. All four
