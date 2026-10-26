@@ -104,18 +104,16 @@ requirement 1 on every supported curve. Requirement 4 rejects an unreduced
 coordinate such as $x + p$. Such a coordinate still satisfies the curve
 equation modulo $p$, so it passes requirement 1.
 
-A failure does not stop the other checks. A key on a supported curve with an
-invalid point still goes through CheckWeakCurve, CheckWeakECPrivateKey and
-CheckECKeySmallDifference, and a malformed point does not abort the run. The
-results of those checks for an invalid key are not reliable, so treat a key
-that fails CheckValidECKey as an invalid key, not as a recovered private key.
-A point with $y = 0$, including a key whose coordinates are both unset, also
-fails CheckWeakECPrivateKey with `SEVERITY_CRITICAL` and a `DISCRETE_LOG` of
-`0`: multiplying such a point by an even number gives the point at infinity,
-whose discrete logarithm the search reports as 0. This is a false positive, and
-CheckIssuerKey passes it on to the signature as `SEVERITY_CRITICAL`. In the
-other direction, an unreduced x-coordinate can hide a weak private key from
-CheckWeakECPrivateKey.
+A failure does not stop the other checks, and a malformed point does not abort
+the run. A key on a supported curve with an invalid point still goes through
+CheckWeakCurve, CheckWeakECPrivateKey and CheckECKeySmallDifference.
+CheckWeakECPrivateKey first reduces both coordinates modulo $p$ and searches
+only points that are then valid. A point that is not on the curve has no
+private key and passes that check; this includes a point with $y = 0$, such as
+a key whose coordinates are both unset. An unreduced encoding of a valid point,
+such as $x + p$, is searched as the point it encodes, so a weak private key is
+still found. The results of CheckECKeySmallDifference for an invalid key are not
+reliable, so treat a key that fails CheckValidECKey as an invalid key first.
 
 ### CheckWeakCurve
 
@@ -189,7 +187,9 @@ $d - n$.
 
 The check groups the keys of one call by curve and searches each group in one
 batch, which is much faster than checking the keys one at a time. Each key
-still gets its own result.
+still gets its own result. Only keys whose point is valid after reducing its
+coordinates modulo $p$ are searched, and $k$ above counts only those; see
+[CheckValidECKey](#checkvalideckey).
 
 ### CheckECKeySmallDifference
 

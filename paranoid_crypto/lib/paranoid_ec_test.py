@@ -13,8 +13,10 @@
 # limitations under the License.
 """EC Tests for paranoid_crypto.lib.paranoid."""
 
+import copy
 from absl.testing import absltest
 from paranoid_crypto import paranoid_pb2
+from paranoid_crypto.lib import ec_util
 from paranoid_crypto.lib import paranoid
 from paranoid_crypto.lib import paranoid_base_test
 from paranoid_crypto.lib import util
@@ -196,6 +198,25 @@ class ParanoidECTest(paranoid_base_test.ParanoidBaseTest):
     self.assertTrue(check.Check(ec_keys_weak_private))
     self.assertResults(ec_keys_weak_private, check.check_name, True)
     # TODO(pedroysb): Create assertDLogs method and call it here.
+
+  def testCheckWeakECPrivateKeyIgnoresPointOffCurve(self):
+    # A point off the curve has no private key, so none can be recovered.
+    key = copy.deepcopy(bad_ec_key_y_zero)
+    check = ec_single_checks.CheckWeakECPrivateKey()
+    self.assertFalse(check.Check([key]))
+    self.assertResults([key], check.check_name, False)
+
+  def testCheckWeakECPrivateKeyUnreducedCoordinate(self):
+    # Private key 5, with the x-coordinate encoded as x + p.
+    curve = ec_util.CURVE_FACTORY[paranoid_pb2.CurveType.CURVE_SECP256R1]
+    x, y = curve.Multiply(curve.g, 5)
+    key = paranoid_pb2.ECKey()
+    key.ec_info.curve_type = paranoid_pb2.CurveType.CURVE_SECP256R1
+    key.ec_info.x = util.Int2Bytes(x + curve.mod)
+    key.ec_info.y = util.Int2Bytes(y)
+    check = ec_single_checks.CheckWeakECPrivateKey()
+    self.assertTrue(check.Check([key]))
+    self.assertResults([key], check.check_name, True)
 
   def testCheckECKeySmallDifference(self):
     # Weak keys.

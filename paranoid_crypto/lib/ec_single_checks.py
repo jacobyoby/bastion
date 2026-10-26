@@ -129,8 +129,19 @@ class CheckWeakECPrivateKey(base_check.ECKeyCheck):
       keys = [key for key in artifacts if key.ec_info.curve_type == curve_id]
       if not keys:
         continue
-      points = [ec_util.PublicPoint(key.ec_info) for key in keys]
-      discrete_logs = curve.ExtendedBatchDL(points)
+      # Only valid public keys have a private key to find. Coordinates are
+      # reduced first, so an unreduced encoding of a weak key is still found,
+      # while a point off the curve (e.g. y = 0, which doubles to infinity and
+      # would give a discrete log of 0) is never reported. CheckValidECKey
+      # reports both kinds of encoding.
+      points = [tuple(c % curve.mod for c in ec_util.PublicPoint(key.ec_info))
+                for key in keys]
+      valid = [i for i, p in enumerate(points) if curve.IsValidPublicKey(p)]
+      discrete_logs = [None] * len(keys)
+      if valid:
+        for i, dlog in zip(valid,
+                           curve.ExtendedBatchDL([points[i] for i in valid])):
+          discrete_logs[i] = dlog
       for i, key in enumerate(keys):
         test_result = self._CreateTestResult()
         if discrete_logs[i] is not None:

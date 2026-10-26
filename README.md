@@ -14,6 +14,10 @@ Paranoid runs unchanged.
     RSA modulus, an ECDSA signature with r or s outside [1, n - 1], or an invalid EC
     point with y = 0 (mod p) is reported or skipped instead of raising out of
     every check in the batch.
+-   **CheckWeakECPrivateKey searches only valid points**: a point off the curve
+    is no longer reported as a recovered private key, and a weak key encoded
+    with unreduced coordinates is still found. See
+    [EC public key tests](docs/ec_public_key_tests.md#checkvalideckey).
 -   **Import order**: `paranoid_crypto.lib.ecdsa_sig_checks` can be imported
     before `paranoid_crypto.lib.paranoid`.
 
@@ -114,7 +118,7 @@ Install paranoid_crypto python package:
 
 ```$ python3 -m pip install .```
 
-To check whether the installation was successful, run the unit tests. All 311
+To check whether the installation was successful, run the unit tests. All 313
 should pass:
 
 ```$ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"```
@@ -137,7 +141,7 @@ $ uv pip install -p .venv -r requirements.txt pybind11 setuptools gmpy2 cysignal
 $ uv pip install -p .venv --no-build-isolation -e .
 ```
 
-Run the unit tests. All 311 pass in about 2.5 minutes on an Apple Silicon Mac
+Run the unit tests. All 313 pass in about 2.5 minutes on an Apple Silicon Mac
 mini:
 
 ```$ cd paranoid_crypto && ../.venv/bin/python -m unittest discover -b -p "*test.py"```
