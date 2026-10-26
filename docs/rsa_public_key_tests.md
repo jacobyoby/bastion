@@ -179,11 +179,33 @@ number generator of OpenSSL on Debian-based systems. The README lists
 [CVE-2008-0166] ([DSA-1571]) as related. The check builds the string
 `Modulus=<n in uppercase hex>\n` and hashes it with SHA-1. It keeps the last 20
 hex digits of the hash and looks up `RSA-<bit length>:<digits>` in the bundled
-denylists `lib/data/weak_keylist.RSA-1024.dat`, `weak_keylist.RSA-2048.dat` and
-`weak_keylist.RSA-4096.dat`, with 294912 entries each.
+denylists.
 
-Only moduli of exactly 1024, 2048 or 4096 bits can match; keys of any other
-size pass. A match is a lookup on 80 bits of a hash, not a factorization.
+The bug made keys depend only on the process ID (0 to 32767), the
+architecture and the generating program, and openssl and OpenSSH's ssh-keygen
+produce different keys from the same state. The denylists cover both:
+
+*   openssl keys: `lib/data/weak_keylist.RSA-1024.dat`,
+    `weak_keylist.RSA-2048.dat` and `weak_keylist.RSA-4096.dat`, and
+    `weak_keylist.RSA-3072.lzma`, with 294912 entries each. They cover
+    little-endian 32-bit and 64-bit and big-endian 32-bit architectures and
+    three openssl variants (with and without a `.rnd` file, and old and new
+    versions without one).
+*   ssh-keygen keys: `lib/data/weak_keylist_ssh.RSA-<bits>.lzma` for 1024,
+    2048, 3072 and 4096 bits, with 98304 entries each, for the same three
+    architectures.
+
+The 3072-bit and ssh-keygen lists were computed from the keys in
+[badkeys/debianopenssl][debianopenssl] (CC0), as recorded in
+`lib/data/weak_keylist.LICENSE`; a sample of the openssl keys there is fully
+covered by the older lists. In 2012, 31,111 RSA SSH hosts served Debian weak
+keys, against 4,147 TLS hosts [[MiningPsQs]]; the ssh-keygen lists are what
+catch the SSH keys. Loading all the lists takes about a second and roughly
+300 MB of memory, once per check instance.
+
+Only moduli of exactly 1024, 2048, 3072 or 4096 bits can match, and keys from
+PIDs above 32767 or from MIPS systems are not covered. A match is a lookup on
+80 bits of a hash, not a factorization.
 
 ### CheckContinuedFractions
 
@@ -507,6 +529,8 @@ estimates and experiments suggest a value of about $2^{128}$.
 [keypair]: https://www.npmjs.com/package/keypair "keypair on npm"
 [keypairGenerator]: https://github.com/juliangruber/keypair/blob/master/index.js "keypair, index.js"
 [badkeys]: https://github.com/badkeys/badkeys "badkeys"
+[debianopenssl]: https://github.com/badkeys/debianopenssl "badkeys/debianopenssl: Private keys vulnerable to Debian OpenSSL bug (CVE-2008-0166)"
+[MiningPsQs]: https://factorable.net/weakkeys12.extended.pdf "N. Heninger, Z. Durumeric, E. Wustrow, J. A. Halderman, Mining Your Ps and Qs: Detection of Widespread Weak Keys in Network Devices, USENIX Security 2012"
 [badkeysRsapoly]: https://github.com/badkeys/badkeys/blob/main/badkeys/rsakeys/rsapoly.py "badkeys, rsapoly.py"
 [ShortSleeve]: https://blog.trailofbits.com/2026/06/12/factoring-short-sleeve-rsa-keys-with-polynomials/ "K. Ryan, Factoring short-sleeve RSA keys with polynomials, Trail of Bits, 2026"
 [Lehman]: https://doi.org/10.1090/S0025-5718-1974-0340163-2 "R. S. Lehman, Factoring large integers, Math. Comp. 28 (1974), 637-646"

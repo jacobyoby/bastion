@@ -237,6 +237,7 @@ bad_rsa_short_sleeve_32.rsa_info.n = util.Hex2Bytes(
 )
 bad_rsa_keys_short_sleeve = [bad_rsa_short_sleeve_128, bad_rsa_short_sleeve_32]
 
+
 # A real key that shares a prime with other public keys, from the certificate
 # with crt.sh id 5534506057 (badkeys tests/data/rsa-sharedprimes.key).
 bad_rsa_shared_prime = paranoid_pb2.RSAKey()
@@ -263,6 +264,29 @@ def _RSAKey(n: int) -> paranoid_pb2.RSAKey:
   key.rsa_info.n = util.Int2Bytes(n)
   key.rsa_info.e = util.Int2Bytes(65537)
   return key
+
+
+# Debian CVE-2008-0166 keys from https://github.com/badkeys/debianopenssl, one
+# per new list: rsa1024/ssh/be32/77.key, rsa2048/ssh/le64/1234.key,
+# rsa3072/ssh/le32/5.key, rsa4096/ssh/le64/31000.key (ssh-keygen) and
+# rsa3072/ssl/le64/1234-rnd.key (openssl).
+bad_rsa_keys_debian_ssh_and_3072 = [
+    _RSAKey(int(
+        'b332ea49156f056cd311443ccb974c2faa8921cd0edadc3487e23a18da005aecf6c9d294271d1aa024d57eb1de17307911470416fe7c06af39c60b6ae57e38fb30534cf9a40968afd21e1c7271d17a9fed34c67722792dd2ca7e1b2e586cfdb72d62d36fda20752ee6783ad41a750e90f633a7710c797c041788029ff2bbc4f5',
+        16)),
+    _RSAKey(int(
+        'e33821ec74c72b80e2b1cca401deab3be4f1c9157de20cd409af8ad7dd1efdd8dcecb87f9e2442b5bf5d1fe624dcfa3c0b5fa9e6c11d205a430439b377bac26327fb7f5b6abd54bbabce0bd698d255e870c2b11a66defaf7fb6d73fb62301f64279515ccaccf2cba380ae3fbe96f8bee12efca7c2e51c212cf17d4c02f520d2bbab18e6c62a7df843b9e342b9969476570119c2d5aedbb731df37ff331e784a61d9d5b934868e4bbe349249b6d9ea23b82d1e374ced984e42dcf94c5aa85860779498d578632587b7c94fc56c1450684bc1eb5662888f882b0b186458cb4c2ba7c1c15aae7961134ea56aaab9fa19d89666ac4c3c9e85b8492bc98b4c9bd40d9',
+        16)),
+    _RSAKey(int(
+        'c2a8aef0a69e5fb6673ed9e524feb9a6fcae7a2ef3394885385f14ce11f288114e5ac6ad52e0d3a274e93e4e22856735de83b7b6fc8302ea72b1158ca5e00400e2677f347ac5ea1a524cb9d4f0a55f595111751d9938caaf5b6cbeb10458f8de151b5ff0a773f6f14894feba59480f355b669652f11a31ea0f64f3a711ec62c1853f78e87892f73221404794fba0c3b9e333d5b77226e45415fb50bacb429d9b78baff3e092b47281ad0e2688f6fe2bc7e3ac8ff3b7420f9848dbb184202d87c6e4e687126a6e945221dd5e96548d2ce45a858d370627b2030afd8299c35964c27241c07ebf0db32a06ff84e4cd0b27bc35209b9452de7b69e2cbe78fb79df78a880abc0981fc1ad03402c83098a783484f8fc13fbab99cb5b87291e511cffcdb122704f7a0fadb3a206d62857708ae932f1e947c9bc3563b0fb1d8b79459664d75f15644b15a17c1dbc58a3f1d86b416a94a87678c78d4e9a502fca65b2f565540058ed4870db47872e59709729ff35f1cd7d6ad52a2b41894dad454233fb03',
+        16)),
+    _RSAKey(int(
+        'cdcd26dfc87b1a0a25ca7e1982edbf4806db540bdeebf7421db936ad970df55e9d01a91fec3b59dec2f75c44631a81f1d65fc21dd1be16a083651d18adf7d983f51bed25038a6802870aca0a90d8678091142c0027b062c0ba3b4263702e744da89be381f78cd4df5ee11ef63ae0d82390d14c7407634853ce4cf91183281c7a34f43bedc5a1a922fb09705131983ced956cc5e723fd72c12430c6937052d328827d28ba2fa547475c817461bb4fe73d81d26753d7c4c53325935858bd8cc65a745c2022c24524ad22f630e575968180c36216862bb307a060b5abd748f6caeddc61509551aa49ddbb3eeb1f6c849d0ab5902a3a5af0a64dddc5dee5a34aedae5056ca79ba7de04c8879b10f073cfacff4c406f33bd5aacf9be8f330dad0eedffc1840df14fa9d99d5f5f1b90616a001278c98600ec68461e267c23d16ed4500a89316ddedbc2d6a2f5a4526de8a705e802f778ad9d43e295f84dc62dde9b42cc45f7c82efedfd7285b91df9d9307dba9605510c989cf9f4e4ab0cd839c2c2a7e6b7373d1ae1a5c45087df7dd32d27414c997b8d82ed599686931b6fcfb1a4bb54626c13927a1993b77e6ca874846c80de78530560ae058e66b1e628e17c70f5e64ce64dd6db044e75bc504295d650a7e71ed1a9b8ea0bfea2275eebe26cda914fc626711e092477963909144e4113872187e6166d548aa99b2f4043e5208f39',
+        16)),
+    _RSAKey(int(
+        'c3ca5971479da23cbeafa108622d8a4b2422c1b690fdb86b08088f14968b42fc36d21fe3af12c92544ff02a82bc07f56a47050b6896df3a355ec10835d5b8f9eb6032cb3dc511abdde4a471284567ac50d1bb71a4494326e12b188e7bea13bba486ddd456f789ee3319205aded96abf7829ed8cf661a93acedeba824b945e35123f7a02e5bdf2471d4b0de1b1768543c72c09f2c9759d87332c1846fd85f9da58c79f83135741cf1a2707ac2849be7c8c6225e4821812490730dac258e6ae6dba054cb2090afa0239d11c1d29ce6f04bc55bc3a61e836c35eaf5e2f0eb18d98fc27a4fc27c2affc9a1f181254ef61c24184c18bd6a0fdf1f260f7eff98273991a4cbb3da99c951fc9f17aeb19d96a9ad9836ff6e2060662f172993a1030a43d25a1ecd96554450edaf2f49db5bdb6aa1aa9bd43e945ff4aa14d22a30c917063598125af216aa9b849dd2fddf7e6ca051c7a91d67b3a81aab4e96321122b8a87768579bfa4d933f5f20676756029141e045a11c7989ac1b0307c2d370d66a605f',
+        16)),
+]
 
 good_and_bad_rsa_keys = good_rsa_keys + bad_rsa_keys_size_exp
 
@@ -330,6 +354,14 @@ class ParanoidRSATest(paranoid_base_test.ParanoidBaseTest):
     check = rsa_single_checks.CheckOpensslDenylist()
     self.assertTrue(check.Check(bad_rsa_keys_debian_pprng))
     self.assertResults(bad_rsa_keys_debian_pprng, check.check_name, True)
+
+  def testCheckOpensslDenylistSshKeygenAnd3072(self):
+    # Real weak keys from badkeys/debianopenssl: ssh-keygen keys, which differ
+    # from openssl's, and an openssl RSA-3072 key.
+    keys = copy.deepcopy(bad_rsa_keys_debian_ssh_and_3072)
+    check = rsa_single_checks.CheckOpensslDenylist()
+    self.assertTrue(check.Check(keys))
+    self.assertResults(keys, check.check_name, True)
 
   def testCheckContinuedFractions(self):
     check = rsa_single_checks.CheckContinuedFractions()

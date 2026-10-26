@@ -26,6 +26,9 @@ means that check found no weakness; it does not prove that a key or generator is
 
 ## Differences from upstream
 
+- **Debian weak keys from ssh-keygen:** `CheckOpensslDenylist` also catches the
+  Debian CVE-2008-0166 keys that ssh-keygen made, and 3072-bit keys. See the
+  [check details](docs/rsa_public_key_tests.md#checkopenssldenylist).
 - **Known shared primes:** `CheckKnownPrimes` flags a single key that contains a
   prime earlier scans found shared between keys. See the
   [check details](docs/rsa_public_key_tests.md#checkknownprimes).

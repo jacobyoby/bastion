@@ -1,0 +1,13 @@
+The lzma-compressed lists weak_keylist.RSA-3072.lzma and
+weak_keylist_ssh.RSA-<bits>.lzma in this directory hold, one per line, the last
+20 hex digits of SHA-1("Modulus=%X\n" % n) for RSA keys made by the Debian
+OpenSSL random number generator bug (CVE-2008-0166): openssl keys of 3072 bits,
+and ssh-keygen keys of 1024, 2048, 3072 and 4096 bits. Each list covers PIDs 0
+to 32767 on little-endian 32-bit and 64-bit and big-endian 32-bit
+architectures; the openssl list also covers the three openssl variants (with
+and without a .rnd file, and old and new versions without one).
+
+They were computed from the private keys in the badkeys/debianopenssl
+repository (https://github.com/badkeys/debianopenssl), commit
+c3412fddd03438fffc0f466ed52bfbb9ddc43a1a (2025-08-08), which is released under
+CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/).

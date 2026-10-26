@@ -35,6 +35,16 @@ KEYPAIR_TABLE_FILE_SMALL = "keypair_table_small.lzma"
 OPENSSL_DENY_RSA1024 = "weak_keylist.RSA-1024.dat"
 OPENSSL_DENY_RSA2048 = "weak_keylist.RSA-2048.dat"
 OPENSSL_DENY_RSA4096 = "weak_keylist.RSA-4096.dat"
+# lzma-compressed lists in the same format, built from badkeys/debianopenssl:
+# openssl keys of 3072 bits, and ssh-keygen keys, which differ from openssl's.
+# See lib/data/weak_keylist.LICENSE for their source.
+OPENSSL_DENY_LZMA = (
+    ("RSA-3072", "weak_keylist.RSA-3072.lzma"),
+    ("RSA-1024", "weak_keylist_ssh.RSA-1024.lzma"),
+    ("RSA-2048", "weak_keylist_ssh.RSA-2048.lzma"),
+    ("RSA-3072", "weak_keylist_ssh.RSA-3072.lzma"),
+    ("RSA-4096", "weak_keylist_ssh.RSA-4096.lzma"),
+)
 
 # See GetSharedPrimesProduct method for explanation of the files below.
 SHARED_PRIMES_FILE = "shared_primes.RSA-%d.dat"
@@ -80,6 +90,10 @@ class DefaultStorage(storage.Storage):
     weak_keylist.update(_ReadDenylist("RSA-1024", file_rsa1024))
     weak_keylist.update(_ReadDenylist("RSA-2048", file_rsa2048))
     weak_keylist.update(_ReadDenylist("RSA-4096", file_rsa4096))
+    for keytype, name in OPENSSL_DENY_LZMA:
+      data = lzma.decompress(resources.GetParanoidResource(PATH + name))
+      weak_keylist.update(
+          _ReadDenylist(keytype, data.decode("ascii").splitlines()))
     return weak_keylist
 
   def GetSharedPrimesProduct(self, bits: int) -> int:

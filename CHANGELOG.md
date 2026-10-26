@@ -28,6 +28,12 @@ Changes in Bastion since it forked from Google's
   the default storage bundles the badkeys products (MIT) for 512 to 4096-bit
   moduli. See
   [RSA public key tests](docs/rsa_public_key_tests.md#checkknownprimes).
+- **Debian weak keys from ssh-keygen and at 3072 bits.** `CheckOpensslDenylist`
+  now also catches CVE-2008-0166 keys made by OpenSSH's ssh-keygen, which differ
+  from openssl's, at 1024, 2048, 3072 and 4096 bits, and openssl keys of 3072
+  bits: 688,128 new entries computed from badkeys/debianopenssl (CC0) and
+  stored lzma-compressed. See
+  [RSA public key tests](docs/rsa_public_key_tests.md#checkopenssldenylist).
 - **ECDSA nonce reuse.** `CheckNonceReuse` recovers the private key from two
   signatures of one key that share r, whether they used the nonce k or n - k.
   See [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuse).
