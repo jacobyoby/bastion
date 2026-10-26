@@ -1,44 +1,60 @@
-Want to contribute? Great! First, read this page (including the small print at
-the end).
+# Contributing to Bastion
 
-### Before you contribute
-Before we can use your code, you must sign the
-[Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
-(CLA), which you can do online. The CLA is necessary mainly because you own the
-copyright to your changes, even after your contribution becomes part of our
-codebase, so we need your permission to use and distribute your code. We also
-need to be sure of various other things—for instance that you'll tell us if you
-know that your code infringes on other people's patents. You don't have to sign
-the CLA until after you've submitted your code for review and a member has
-approved it, but you must do it before we can put your code into our codebase.
+Bastion is an independently maintained fork of Google's Paranoid Crypto.
+Contributions to this repository are reviewed by Bastion's maintainer, Jacob Durham.
+The Google CLA process described in the original upstream guide does not apply
+to contributions to this fork.
 
-Before you start working on a larger contribution, you should get in touch with
-us first through the issue tracker with your idea so that we can help out and
-possibly guide you. Coordinating up front makes it much easier to avoid
-frustration later on. For example, we are primarily interested in contributions
-that improve the current checks or implement new ones as long they make sense
-in the real world and that are fast enough to be run at large scale.
+## What to contribute
 
-### Disclosure
-If your checks uncover security vulnerabilities, please first report directly to
-the responsible team/project. You should only submit checks to us once the
-bugs have been acknowledged or fixed.
+Improvements to existing checks, new checks backed by research, bug fixes, tests,
+and clearer documentation are welcome. For a substantial change, start a draft
+pull request describing your approach before investing in the full implementation.
+For new checks, explain the weakness detected, cite the relevant research, and
+describe the expected performance on large batches of artifacts.
 
-Google has several
-[security reward programs](https://www.google.com/about/appsecurity/programs-home/)
-that provide cash rewards for quality security research that identifies or fixes
-security vulnerabilities in products that we provide or proactive security
-improvements to select open-source products. If your checks found or helped fix
-vulnerabilities that are in scope you should submit them to these programs.
+## Submit a pull request
 
-If you have any question with regard to disclosure, please email us at
-security@google.com.
+1. Fork this repository and create a working branch from `dev`.
+2. Keep the change focused and follow the surrounding code style. The Python
+   package name remains `paranoid_crypto`.
+3. Add regression tests for bug fixes and tests for new behavior. Use synthetic
+   or already-public test artifacts; never include private keys from real users.
+4. Update the relevant [check documentation](docs) or [examples](examples) when
+   behavior or usage changes.
+5. Open a pull request against `dev`. Explain the problem, your change, and how
+   you verified it. Include any performance impact or limitations.
 
-### Code reviews
-All submissions, including submissions by project members, require review. We
-use GitHub pull requests for this purpose.
+All submissions, including changes from project members, go through pull-request
+review before merging.
 
-### The small print
-Contributions made by corporations are covered by a different agreement than
-the one above, the
-[Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).
+## Run the tests
+
+Follow the platform-specific setup in the [README](README.md#getting-started).
+With the environment activated, run from the repository root:
+
+```sh
+cd paranoid_crypto
+python3 -m unittest discover -b -p "*test.py"
+```
+
+Include the test command and result in your pull request. If you cannot run part
+of the suite, explain what remains unverified. Documentation-only changes should
+be checked in GitHub's Markdown preview for formatting and link targets.
+
+## Responsible disclosure
+
+If a check uncovers a vulnerability in another project or product, report it
+privately to the responsible vendor or maintainers first. Coordinate disclosure
+before publishing a check or test data that reveals the vulnerability.
+
+Avoid posting undisclosed vulnerabilities, credentials, recovered private keys,
+or other sensitive artifacts in public pull requests or comments. For a
+vulnerability in Bastion itself, check the repository's Security tab for an
+available private reporting option before sharing details publicly.
+
+## License
+
+Contributions should be suitable for distribution under this project's
+[Apache License 2.0](LICENSE). Submit only work you have the right to contribute,
+and preserve applicable copyright and attribution notices.
