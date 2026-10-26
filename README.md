@@ -192,8 +192,8 @@ Bastion is maintained by Jacob Durham at
 The upstream library was developed by members of the Google Security Team and is
 not an officially supported Google product.
 [google/paranoid_crypto](https://github.com/google/paranoid_crypto) is archived
-on GitHub and no longer accepts pull requests; [CONTRIBUTING](CONTRIBUTING.md)
-describes upstream's former process.
+on GitHub and no longer accepts pull requests. To contribute to Bastion, see
+[CONTRIBUTING](CONTRIBUTING.md) and open a pull request against `dev`.
 
 Bastion is distributed under the [Apache License 2.0](LICENSE).
 
