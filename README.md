@@ -26,6 +26,12 @@ means that check found no weakness; it does not prove that a key or generator is
 
 ## Differences from upstream
 
+- **SSH public keys:** `ssh_keys.ParseAuthorizedKeys` and
+  `ssh_keys.ParseKnownHosts` read OpenSSH authorized_keys and known_hosts
+  files, including ssh-keyscan output, into the RSA and EC keys the checks
+  take. They keep keys too weak or invalid for OpenSSH to load, and list
+  unsupported keys such as Ed25519 by line. See
+  [ssh_keys.py](paranoid_crypto/lib/ssh_keys.py).
 - **Debian weak keys from ssh-keygen:** `CheckOpensslDenylist` also catches the
   Debian CVE-2008-0166 keys that ssh-keygen made, and 3072-bit keys. See the
   [check details](docs/rsa_public_key_tests.md#checkopenssldenylist).

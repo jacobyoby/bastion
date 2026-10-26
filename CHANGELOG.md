@@ -9,6 +9,14 @@ Changes in Bastion since it forked from Google's
 
 ### Added
 
+- **SSH public keys.** `ssh_keys` parses lines of OpenSSH authorized_keys and
+  known_hosts files, such as `*.pub` files and ssh-keyscan output, into
+  `RSAKey` and `ECKey` protos: ssh-rsa, ecdsa-sha2-nistp256, -nistp384 and
+  -nistp521, and FIDO security keys (sk-ecdsa-sha2-nistp256@openssh.com).
+  `ParseAuthorizedKeys` and `ParseKnownHosts` split a file into RSA and EC keys
+  and list keys of other types, such as Ed25519, by line number. Only the
+  encoding is checked, so short RSA moduli and points off the curve still reach
+  the checks. Each key's fingerprint is the SHA-256 that `ssh-keygen -l` prints.
 - **RSA signature checks.** `CheckRSASignatureFault` factors the signer's key
   from one faulty PKCS#1 v1.5 signature, using Lenstra's CRT fault attack and
   the RFC 8017 DigestInfo encoding for MD5 and SHA-1 through SHA-512. It is the
