@@ -1,34 +1,146 @@
 # Bastion
 
-Bastion is a fork of Google's [Paranoid](https://github.com/google/paranoid_crypto)
-maintained by Jacob Durham. It is not affiliated with or supported by Google. The
-Python package keeps the upstream name `paranoid_crypto`, so code written for
-Paranoid runs unchanged.
+**Check cryptographic keys, signatures, and pseudorandom output for known weaknesses.**
 
-### Differences from upstream
+Bastion is a Python library for examining cryptographic artifacts, including those
+produced by third-party software or hardware whose source you cannot inspect.
+It is a fork of Google's [Paranoid](https://github.com/google/paranoid_crypto),
+maintained by Jacob Durham. The Python package retains the name `paranoid_crypto`.
+Bastion is independently maintained and is not affiliated with or supported by Google.
 
--   **CheckNonceReuse**: recovers the private key from two ECDSA signatures of
-    one key that share a nonce. See
-    [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuse).
--   **Malformed input does not abort a run**: an empty batch, a tiny or empty
-    RSA modulus, an ECDSA signature with r or s outside [1, n - 1], or an invalid EC
-    point with y = 0 (mod p) is reported or skipped instead of raising out of
-    every check in the batch.
+[Get started](#getting-started) · [Check documentation](docs) · [Examples](examples) · [What changed](#differences-from-upstream)
+
+## What it checks
+
+| Input | Purpose |
+| --- | --- |
+| RSA public keys | Detect known weaknesses such as shared factors, ROCA, and vulnerable key-generation patterns. |
+| Elliptic-curve public keys | Check for weaknesses in EC key material. |
+| ECDSA signatures | Check for weaknesses in signature generation, including nonce reuse. |
+| Pseudorandom output | Run randomness tests that can reveal flaws in generators. |
+
+Use the [check documentation](docs) to choose the checks appropriate to your data
+and the [examples](examples) to see how to call them from Python. A passing check
+means that check found no weakness; it does not prove that a key or generator is secure.
+
+## Differences from upstream
+
+- **ECDSA nonce reuse:** `CheckNonceReuse` can recover a private key from two
+  signatures from the same key that reuse a nonce. See the
+  [check details](docs/ecdsa_signature_tests.md#checknoncereuse).
+- **More robust input handling:** empty batches, tiny or empty RSA moduli,
+  out-of-range ECDSA signature values, and invalid EC points with `y = 0 (mod p)`
+  are reported or skipped rather than aborting a batch.
 -   **CheckWeakECPrivateKey searches only valid points**: a point off the curve
     is no longer reported as a recovered private key, and a weak key encoded
     with unreduced coordinates is still found. See
     [EC public key tests](docs/ec_public_key_tests.md#checkvalideckey).
--   **Import order**: `paranoid_crypto.lib.ecdsa_sig_checks` can be imported
-    before `paranoid_crypto.lib.paranoid`.
+- **Flexible import order:** `paranoid_crypto.lib.ecdsa_sig_checks` can be imported
+  before `paranoid_crypto.lib.paranoid`.
 
-## Overview
+## Getting started
 
-**Paranoid** project checks for well known weaknesses on cryptographic artifacts
-such as public keys, digital signatures and general pseudorandom numbers.
-This library contains implementations and optimizations of existing work found
-in the literature. The existing work showed that the generation of these
-artifacts was flawed in some cases. The following  are some examples of
-publications the library is based on.
+1. Install the library using one of the options below.
+2. Browse the [examples](examples) for the type of artifact you want to test.
+3. Consult the [check documentation](docs) for the available checks and their behavior.
+
+### Installation
+
+Clone the `dev` branch to use the version described on this page:
+
+```sh
+git clone --branch dev https://github.com/jacobyoby/bastion.git
+cd bastion
+```
+
+#### Debian
+
+**NOTE**: Upstream tested the commands below on Debian 12 (bookworm). Make sure
+you will be using `python3.11` or newer.
+
+Install dependencies:
+
+```sh
+sudo apt update && sudo apt install python3 python3-full python3-pip python3-pybind11 python3-fpylll python3-gmpy2 protobuf-compiler
+```
+
+Create and activate a virtual environment:
+
+```sh
+python3 -m venv --system-site-packages ~/paranoid-venv
+```
+
+```sh
+source ~/paranoid-venv/bin/activate
+```
+
+Install the Python package:
+
+```sh
+python3 -m pip install .
+```
+
+Verify the installation by running the unit tests:
+
+```sh
+cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"
+```
+
+#### macOS (Apple Silicon)
+
+This setup uses Homebrew and [uv](https://docs.astral.sh/uv/). The
+pinned `protobuf==3.20.*` runtime needs an older protoc than Homebrew ships. These
+steps use the matching protoc 3.20.3, whose release has no Apple Silicon binary,
+so the x86_64 binary runs under Rosetta (`softwareupdate --install-rosetta` if it
+is missing).
+
+```sh
+brew install fplll
+uv venv -p 3.11 .venv
+curl -L -o /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v3.20.3/protoc-3.20.3-osx-x86_64.zip
+unzip -o /tmp/protoc.zip -d .venv/protoc
+export CPATH=/opt/homebrew/include LIBRARY_PATH=/opt/homebrew/lib PROTOC=$PWD/.venv/protoc/bin/protoc
+uv pip install -p .venv -r requirements.txt pybind11 setuptools gmpy2 cysignals fpylll
+uv pip install -p .venv --no-build-isolation -e .
+```
+
+Verify the installation by running the unit tests:
+
+```sh
+cd paranoid_crypto && ../.venv/bin/python -m unittest discover -b -p "*test.py"
+```
+
+#### Docker
+
+Alternatively, if you want to run it in a container, you can use our provided
+[Dockerfile](Dockerfile) as shown below.
+
+**NOTE**: Make sure you have [docker](https://docs.docker.com/engine/install/)
+installed.
+
+After cloning the repository, build the docker image:
+
+```sh
+docker build -t paranoid-img .
+```
+
+Create and start the container:
+
+```sh
+docker run --name paranoid-container -it paranoid-img
+```
+
+To check whether the installation was successful, run the unit tests inside the
+container:
+
+```
+cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"
+```
+
+## Research background
+
+Bastion builds on Paranoid's implementations and optimizations of published
+cryptographic research, including:
 
 -   [Arjen K. Lenstra, James P. Hughes, Maxime Augier, Joppe W. Bos, Thorsten
     Kleinjung, and Christophe Wachter. (2012). **Ron was wrong, Whit is
@@ -48,141 +160,13 @@ publications the library is based on.
     Attacks against Weak ECDSA Signatures in
     Cryptocurrencies**](https://eprint.iacr.org/2019/023);
 
-## Goal
+## Historical upstream results
 
-The goal is to increase the confidence in cryptography use cases inside and
-outside Google.
-
-When dealing with asymmetric encryption, crypto artifacts usually are:
-
-1.  Generated by one of our own tools (e.g., at Google we use for example
-    [boringssl](https://github.com/google/boringssl) or
-    [tink](https://github.com/google/tink)); or,
-2.  Generated by third party tools that we have access to (so these tools can
-    be, for example, checked for vulnerabilities using
-    [wycheproof](https://github.com/google/wycheproof)); or,
-3.  **Generated by third party tools and/or hardware or software black boxes
-    that we do not have access to.**
-
-With Paranoid, any cryptographic artifact can be tested, but its primary
-motivation is to detect the usage of weak third party hardware or software black
-boxes. Hence, Paranoid can be used even if we are not able to inspect the source
-code (situation 3. listed above).
-
-The project aims to detect known vulnerabilities as well as unknown ones. E.g.,
-it tries to identify vulnerabilities caused by programming errors or the use of
-weak proprietary random number generators. Detecting new vulnerabilities is of
-course much more difficult than detecting known ones. Such detections may
-require large sets of artifacts or find weak ones only with a low probability.
-
-Therefore, we are very interested to receive feedback and learn about the
-cryptographic library that generated weak cryptographic artifacts (See [call for
-contributions](https://security.googleblog.com/2022/08/announcing-open-sourcing-of-paranoids.html)
-). The project is constantly work in progress. After learning about weak
-implementations the plan is to analyze and add detections targeting them.
-
-## Getting Started
-
-Documentation for the current implemented checks is located at [docs](docs). The
-documentation will be populated with more content over time.
-
-To learn how to use the checks, you can look at the [examples](examples)
-folder or the unit tests (\*test.py files). The examples demonstrate testing
-different crypto artifacts.
-
-###  Installation
-
-Clone the repository:
-
-```$ git clone https://github.com/jacobyoby/bastion.git && cd bastion```
-
-#### Debian
-
-**NOTE**: Upstream tested the commands below on Debian 12 (bookworm). Make sure
-you will be using `python3.11` or newer.
-
-Install dependencies:
-
-```$ sudo apt update && sudo apt install python3 python3-full python3-pip python3-pybind11 python3-fpylll python3-gmpy2 protobuf-compiler```
-
-Create and activate a virtual environment:
-
-```$ python3 -m venv --system-site-packages ~/paranoid-venv```
-
-```$ source ~/paranoid-venv/bin/activate```
-
-**NOTE**: If you know what you are doing, you can instead skip to the next step
-and use `--break-system-packages` switch for `pip`.
-
-Install paranoid_crypto python package:
-
-```$ python3 -m pip install .```
-
-To check whether the installation was successful, run the unit tests. All 313
-should pass:
-
-```$ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"```
-
-#### macOS (Apple Silicon)
-
-Tested on macOS 27.2 with Homebrew and [uv](https://docs.astral.sh/uv/). The
-pinned `protobuf==3.20.*` runtime needs an older protoc than Homebrew ships. These
-steps use the matching protoc 3.20.3, whose release has no Apple Silicon binary,
-so the x86_64 binary runs under Rosetta (`softwareupdate --install-rosetta` if it
-is missing).
-
-```
-$ brew install fplll
-$ uv venv -p 3.11 .venv
-$ curl -L -o /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v3.20.3/protoc-3.20.3-osx-x86_64.zip
-$ unzip -o /tmp/protoc.zip -d .venv/protoc
-$ export CPATH=/opt/homebrew/include LIBRARY_PATH=/opt/homebrew/lib PROTOC=$PWD/.venv/protoc/bin/protoc
-$ uv pip install -p .venv -r requirements.txt pybind11 setuptools gmpy2 cysignals fpylll
-$ uv pip install -p .venv --no-build-isolation -e .
-```
-
-Run the unit tests. All 313 pass in about 2.5 minutes on an Apple Silicon Mac
-mini:
-
-```$ cd paranoid_crypto && ../.venv/bin/python -m unittest discover -b -p "*test.py"```
-
-### Docker
-
-Alternatively, if you want to run it in a container, you can use our provided
-[Dockerfile](Dockerfile) as shown below.
-
-**NOTE**: Make sure you have [docker](https://docs.docker.com/engine/install/)
-installed.
-
-After cloning the repository, build the docker image:
-
-```$ docker build -t paranoid-img .```
-
-Create and start the container:
-
-```
-$ docker run --name paranoid-container -it paranoid-img
-paranoid-user@6191368b26b8:~$
-```
-
-To check whether the installation was successful, run the unit tests inside the
-container:
-
-```
-paranoid-user@6191368b26b8:~$ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"
-```
-
-## Preliminary results
-
-These are the upstream Paranoid team's results, as of September 2022. Similar to
-other published works, they have been analyzing the crypto artifacts
-from [Certificate Transparency (CT)](https://certificate.transparency.dev),
-which logs issued website certificates since 2013 with the goal of making them
-transparent and verifiable. Its database contains more than 7 billion
-certificates as of September 2022. For the Paranoid checks of EC public keys and
-ECDSA signatures, so far, we have not found any weak artifacts in CT. For the
-RSA public key checks with severities high or critical, we have the following
-results:
+The following results were reported by the upstream Paranoid team in September
+2022 from analysis of [Certificate Transparency](https://certificate.transparency.dev)
+data. They are historical upstream findings, not measurements of this Bastion fork.
+At that time, the team reported no weak EC public keys or ECDSA signatures in
+their CT analysis. High- and critical-severity RSA findings are listed below.
 
 |       **TestName**       | **Potentially Related CVEs** |    **Severity**   | **Number of Weak Artifacts** |
 |:------------------------:|:----------------------------:|:-----------------:|:----------------------------:|
@@ -197,10 +181,10 @@ results:
 |      CheckPollardpm1     |               -              | SEVERITY_CRITICAL |               1              |
 
 Some of these certificates were already expired or revoked. For the ones that
-were still active (most of the CheckGCD ones), we immediately reported them to
+were still active (most of the CheckGCD ones), the upstream team reported them to
 the Certificate Authorities to be revoked.
 
-## ABOUT
+## Project, license, and citation
 
 Bastion is maintained by Jacob Durham at
 [jacobyoby/bastion](https://github.com/jacobyoby/bastion).
@@ -211,9 +195,11 @@ not an officially supported Google product.
 on GitHub and no longer accepts pull requests; [CONTRIBUTING](CONTRIBUTING.md)
 describes upstream's former process.
 
-If you use Paranoid in your research, you can cite it using the following
-BibTeX:
-```
+Bastion is distributed under the [Apache License 2.0](LICENSE).
+
+To cite the upstream Paranoid work in research, use:
+
+```bibtex
 @software{Barbosa_Bleichenbacher_Paranoid_Crypto_2022,
   author = {Barbosa, Pedro and Bleichenbacher, Daniel},
   license = {Apache-2.0},
