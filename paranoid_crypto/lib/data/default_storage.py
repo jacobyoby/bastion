@@ -21,6 +21,7 @@ import lzma
 import re
 from absl import logging
 from paranoid_crypto.lib import resources
+from paranoid_crypto.lib import util
 from paranoid_crypto.lib.data import data_pb2
 from paranoid_crypto.lib.data import storage
 from paranoid_crypto.lib.data import unseeded_rands
@@ -34,6 +35,10 @@ KEYPAIR_TABLE_FILE_SMALL = "keypair_table_small.lzma"
 OPENSSL_DENY_RSA1024 = "weak_keylist.RSA-1024.dat"
 OPENSSL_DENY_RSA2048 = "weak_keylist.RSA-2048.dat"
 OPENSSL_DENY_RSA4096 = "weak_keylist.RSA-4096.dat"
+
+# See GetSharedPrimesProduct method for explanation of the files below.
+SHARED_PRIMES_FILE = "shared_primes.RSA-%d.dat"
+SHARED_PRIMES_BITS = (512, 768, 1024, 2048, 4096)
 
 
 class DefaultStorage(storage.Storage):
@@ -76,3 +81,12 @@ class DefaultStorage(storage.Storage):
     weak_keylist.update(_ReadDenylist("RSA-2048", file_rsa2048))
     weak_keylist.update(_ReadDenylist("RSA-4096", file_rsa4096))
     return weak_keylist
+
+  def GetSharedPrimesProduct(self, bits: int) -> int:
+    # Products of primes shared by real moduli, from the badkeys project; see
+    # lib/data/shared_primes.LICENSE for their source and license.
+    if bits not in SHARED_PRIMES_BITS:
+      return 1
+    path = PATH + SHARED_PRIMES_FILE % bits
+    logging.info("Loading shared primes from %s.", path)
+    return util.Bytes2Int(resources.GetParanoidResource(path))

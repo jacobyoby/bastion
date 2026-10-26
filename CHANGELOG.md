@@ -21,6 +21,13 @@ Changes in Bastion since it forked from Google's
   factoring a polynomial. A bit-mask pre-filter keeps the cost for other keys
   under a microsecond. See
   [RSA public key tests](docs/rsa_public_key_tests.md#checkshortsleeversa).
+- **Known shared primes.** `CheckKnownPrimes` tests each key on its own against
+  the product of primes that earlier scans found shared between RSA keys, so a
+  single key is flagged where `CheckGCD` needs the other key in the same batch.
+  The primes come from a new storage hook, `Storage.GetSharedPrimesProduct`;
+  the default storage bundles the badkeys products (MIT) for 512 to 4096-bit
+  moduli. See
+  [RSA public key tests](docs/rsa_public_key_tests.md#checkknownprimes).
 - **ECDSA nonce reuse.** `CheckNonceReuse` recovers the private key from two
   signatures of one key that share r, whether they used the nonce k or n - k.
   See [ECDSA signature tests](docs/ecdsa_signature_tests.md#checknoncereuse).

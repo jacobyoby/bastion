@@ -86,6 +86,7 @@ CheckUnseededRand          | single key | `SEVERITY_CRITICAL`                   
 CheckSmallUpperDifferences | single key | `SEVERITY_CRITICAL`                                       | yes
 CheckKeypairDenylist       | single key | `SEVERITY_CRITICAL`                                       | yes
 CheckShortSleeveRSA        | single key | `SEVERITY_CRITICAL`                                       | yes
+CheckKnownPrimes           | single key | `SEVERITY_CRITICAL`                                       | when one prime is known
 CheckGCD                   | aggregate  | `SEVERITY_CRITICAL`                                       | yes
 CheckGCDN1                 | aggregate  | `SEVERITY_UNKNOWN`                                        | no (attaches a GCD of $n - 1$)
 
@@ -420,6 +421,31 @@ Only the two patterns above are tested. The check needs both primes to be
 short-sleeve; the DSA keys from the same CompleteFTP bug are not covered,
 since Bastion has no DSA key type.
 
+### CheckKnownPrimes
+
+Checks whether the key contains a prime that earlier scans already found shared
+between RSA keys. CheckGCD finds shared primes only among the keys passed in one
+call, so a single key is never flagged by it. Batch GCD over large key sets has
+found thousands of such primes, mostly from devices with poor randomness, and
+this check makes them usable on any one key.
+
+The check computes $\gcd(n, P)$, where $P$ is the product of the known shared
+primes for moduli of exactly $\ell$ bits, returned by the storage hook
+`Storage.GetSharedPrimesProduct`. A result $g$ with $1 < g < n$ is a known
+prime, and $g$ and $n/g$ are attached as factors. If both primes are known,
+$g = n$: the key is flagged, but no factors are attached, because a product of
+primes cannot be split. The gcd costs well under a millisecond per key.
+
+The default storage bundles the products of the [badkeys] project, converted
+to `lib/data/shared_primes.RSA-<bits>.dat`; `lib/data/shared_primes.LICENSE`
+gives their source and MIT license. They cover moduli of exactly 512, 768,
+1024, 2048 and 4096 bits, with roughly 360, 9, 4,000, 620 and 3 primes
+(estimated from the bit lengths of the products), and were last updated in
+March 2022. Keys of other sizes, including 3072 bits, pass
+untested. A `storage.Storage` passed as the constructor's `paranoid_storage`
+can supply other primes, for example ones found by running CheckGCD over a
+large key set.
+
 ### CheckGCD
 
 Checks whether two keys share a prime. If $n_1$ and $n_2$ share a prime $p$,
@@ -480,6 +506,7 @@ estimates and experiments suggest a value of about $2^{128}$.
 [GHSL-2021-1012]: https://securitylab.github.com/advisories/GHSL-2021-1012-keypair/ "GitHub Security Lab advisory GHSL-2021-1012"
 [keypair]: https://www.npmjs.com/package/keypair "keypair on npm"
 [keypairGenerator]: https://github.com/juliangruber/keypair/blob/master/index.js "keypair, index.js"
+[badkeys]: https://github.com/badkeys/badkeys "badkeys"
 [badkeysRsapoly]: https://github.com/badkeys/badkeys/blob/main/badkeys/rsakeys/rsapoly.py "badkeys, rsapoly.py"
 [ShortSleeve]: https://blog.trailofbits.com/2026/06/12/factoring-short-sleeve-rsa-keys-with-polynomials/ "K. Ryan, Factoring short-sleeve RSA keys with polynomials, Trail of Bits, 2026"
 [Lehman]: https://doi.org/10.1090/S0025-5718-1974-0340163-2 "R. S. Lehman, Factoring large integers, Math. Comp. 28 (1974), 637-646"

@@ -552,6 +552,55 @@ class CheckSmallUpperDifferences(base_check.RSAKeyCheck):
     return any_weak
 
 
+class CheckKnownPrimes(base_check.RSAKeyCheck):
+  """Checks whether a key shares a prime already found shared by other keys.
+
+  Batch GCD over large public key sets (CheckGCD within one batch) has found
+  many primes that devices with poor randomness reused across keys. A key that
+  contains one of those primes is broken, even when no other key in the same
+  batch shares it. This check tests each key on its own against a stored
+  product of such primes: gcd(n, product) is a known prime of n.
+
+  When both primes of n are known, the gcd is n itself. The key is then flagged
+  without factors, since a product of primes cannot be split.
+  """
+
+  def __init__(self, paranoid_storage: Optional[storage.Storage] = None):
+    """CheckKnownPrimes check constructor.
+
+    Args:
+      paranoid_storage: Instance of storage.Storage, containing
+        GetSharedPrimesProduct method.
+    """
+    super().__init__(paranoid_pb2.SeverityType.SEVERITY_CRITICAL)
+    self._storage = paranoid_storage or default_storage.DefaultStorage()
+    self._products = {}
+
+  def _Product(self, bits: int) -> int:
+    if bits not in self._products:
+      self._products[bits] = gmpy.mpz(self._storage.GetSharedPrimesProduct(bits))
+    return self._products[bits]
+
+  def Check(self, artifacts: list[paranoid_pb2.RSAKey]) -> bool:
+    any_weak = False
+    for key in artifacts:
+      test_result = self._CreateTestResult()
+      n = gmpy.mpz(util.Bytes2Int(key.rsa_info.n))
+      g = gmpy.gcd(n, self._Product(n.bit_length()))
+      if 1 < g < n:
+        factors = [g, n // g]
+        logging.warning("Key factored! Factors: %s\n%s", factors, key.rsa_info)
+        util.AttachFactors(key.test_info, consts.INFO_NAME_N_FACTORS, factors)
+        any_weak = True
+        test_result.result = True
+      elif g == n and n > 1:
+        logging.warning("Both primes of the key are known:\n%s", key.rsa_info)
+        any_weak = True
+        test_result.result = True
+      util.SetTestResult(key.test_info, test_result)
+    return any_weak
+
+
 class CheckShortSleeveRSA(base_check.RSAKeyCheck):
   """Factors "short-sleeve" keys, whose primes have zero bits in every limb.
 

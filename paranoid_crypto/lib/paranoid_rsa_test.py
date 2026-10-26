@@ -14,12 +14,16 @@
 """RSA Tests for paranoid_crypto.lib.paranoid."""
 
 import copy
+import math
 from absl.testing import absltest
+import gmpy2 as gmpy
 from paranoid_crypto import paranoid_pb2
+from paranoid_crypto.lib import consts
 from paranoid_crypto.lib import paranoid
 from paranoid_crypto.lib import paranoid_base_test
 from paranoid_crypto.lib import short_sleeve
 from paranoid_crypto.lib import util
+from paranoid_crypto.lib.data import default_storage
 from paranoid_crypto.lib.paranoid import rsa_aggregate_checks
 from paranoid_crypto.lib.paranoid import rsa_single_checks
 
@@ -233,6 +237,33 @@ bad_rsa_short_sleeve_32.rsa_info.n = util.Hex2Bytes(
 )
 bad_rsa_keys_short_sleeve = [bad_rsa_short_sleeve_128, bad_rsa_short_sleeve_32]
 
+# A real key that shares a prime with other public keys, from the certificate
+# with crt.sh id 5534506057 (badkeys tests/data/rsa-sharedprimes.key).
+bad_rsa_shared_prime = paranoid_pb2.RSAKey()
+bad_rsa_shared_prime.rsa_info.e = util.Hex2Bytes('010001')
+bad_rsa_shared_prime.rsa_info.n = util.Hex2Bytes(
+    'b504bbdb47631e8058d9e5c40ec30d1a2e86598fc1dfb4f218eead0204099f0780be4e40062dc029a389cc740b9aaa64cf387ddb3d851f36692a83a2cb812ad2db78276d338053e261d006e667df4dc82d321ca609705c01a523b9909cc982080dd10d9da3f7c133e8d0511d5a8cdbd3fe3e48d275221970c90194bbbee600782bdd0da3fc6a98d114886e2926815ecd5297fa3c0f090259b6fa54108fd623bab308e4af414193d11a6f381369d27b8cd3d8d91a2abcce6c7fa615de5d465ce2d3415768c174e958988b02a05b6ede7f56420f7674c8567bb9a35a1809df96c394b2868cbad4a440fb342440159a75648c27e94caca533d0ff074663bad66ca5'
+)
+
+
+class _SharedPrimesStorage(default_storage.DefaultStorage):
+  """Storage whose known shared primes are the given ones, per modulus size."""
+
+  def __init__(self, primes_by_bits: dict[int, list[int]]):
+    self._products = {
+        bits: math.prod(primes) for bits, primes in primes_by_bits.items()
+    }
+
+  def GetSharedPrimesProduct(self, bits: int) -> int:
+    return self._products.get(bits, 1)
+
+
+def _RSAKey(n: int) -> paranoid_pb2.RSAKey:
+  key = paranoid_pb2.RSAKey()
+  key.rsa_info.n = util.Int2Bytes(n)
+  key.rsa_info.e = util.Int2Bytes(65537)
+  return key
+
 good_and_bad_rsa_keys = good_rsa_keys + bad_rsa_keys_size_exp
 
 
@@ -396,6 +427,43 @@ class ParanoidRSATest(paranoid_base_test.ParanoidBaseTest):
     # not a factorization.
     n = util.Bytes2Int(bad_rsa_short_sleeve_128.rsa_info.n)
     self.assertIsNone(short_sleeve._FactorFromValues([n, 3, 5, 7], n))
+
+  def testCheckKnownPrimes(self):
+    # Unlike CheckGCD, a single key is enough: the other key is in the data.
+    key = copy.deepcopy(bad_rsa_shared_prime)
+    check = rsa_single_checks.CheckKnownPrimes()
+    self.assertTrue(check.Check([key]))
+    self.assertResults([key], check.check_name, True)
+    self.assertFactors([key])
+
+  def testCheckKnownPrimesStorageHook(self):
+    p1, p2, p3, p4, p5 = (int(gmpy.next_prime(2**1023 + 2**900 * i))
+                          for i in range(1, 6))
+    s1, s2 = (int(gmpy.next_prime(2**511 + 2**400 * i)) for i in range(1, 3))
+    # The products of p1 * p4 and similar have 2047 bits, those of s1 * s2 have
+    # 1023. Each size is tested only against the primes stored for it.
+    check = rsa_single_checks.CheckKnownPrimes(
+        paranoid_storage=_SharedPrimesStorage({2047: [p1, p2, p3], 1023: [s1]}))
+    one_known, both_known, none_known = (
+        _RSAKey(p1 * p4), _RSAKey(p1 * p2), _RSAKey(p4 * p5))
+    small_known, small_wrong_size = _RSAKey(s1 * s2), _RSAKey(p3 * s2)
+    self.assertTrue(check.Check(
+        [one_known, both_known, none_known, small_known, small_wrong_size]))
+    self.assertResults([one_known, both_known, small_known], check.check_name,
+                       True)
+    # p3 is stored only for 2047-bit moduli, so a 1535-bit modulus with p3
+    # passes: the lookup is by the modulus's exact bit length.
+    self.assertResults([none_known, small_wrong_size], check.check_name, False)
+    self.assertEqual(
+        util.GetAttachedFactors(one_known.test_info,
+                                consts.INFO_NAME_N_FACTORS), {p1, p4})
+    # With both primes in one stored product, the gcd is n itself: the key is
+    # weak, but the product cannot be split into its factors.
+    self.assertIsNone(
+        util.GetAttachedFactors(both_known.test_info,
+                                consts.INFO_NAME_N_FACTORS))
+    # n = 1 also has gcd n, but has no primes to be known.
+    self.assertFalse(check.Check([_RSAKey(1)]))
 
   def testCheckAllRSA(self):
     self.assertFalse(paranoid.CheckAllRSA(good_rsa_keys))

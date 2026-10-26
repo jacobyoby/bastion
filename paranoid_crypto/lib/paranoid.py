@@ -57,6 +57,7 @@ _ACTIVE_RSA_SINGLE_CHECKS = (
     rsa_single_checks.CheckSmallUpperDifferences,
     rsa_single_checks.CheckKeypairDenylist,
     rsa_single_checks.CheckShortSleeveRSA,
+    rsa_single_checks.CheckKnownPrimes,
 )
 
 _ACTIVE_RSA_SIG_CHECKS = (rsa_sig_checks.CheckRSASignatureFault,)

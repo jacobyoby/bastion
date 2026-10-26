@@ -65,3 +65,13 @@ class Storage(metaclass=abc.ABCMeta):
     keytype is "RSA-<bit length of n>" and h is the last 20 hex digits of the
     SHA-1 of "Modulus=<n in uppercase hex>\\n", as in openssl-vulnkey.
     """
+
+  @abc.abstractmethod
+  def GetSharedPrimesProduct(self, bits: int) -> int:
+    """Returns the product of known primes shared by RSA moduli of this size.
+
+    The primes are factors that earlier scans found shared between RSA moduli
+    of exactly bits bits, for example with a batch GCD. A modulus with a common
+    factor with this product shares a known prime. Returns 1, the empty
+    product, for sizes with no known primes.
+    """

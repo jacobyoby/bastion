@@ -140,7 +140,10 @@ def main():
       license='Apache 2.0',
       ext_modules=_EXT_MODULES,
       package_data={
-          'paranoid_crypto': ['VERSION', 'lib/data/*.dat', 'lib/data/*.lzma']
+          'paranoid_crypto': [
+              'VERSION', 'lib/data/*.dat', 'lib/data/*.lzma',
+              'lib/data/*.LICENSE'
+          ]
       },
       keywords='paranoid cryptography',
       url='https://github.com/jacobyoby/bastion',
