@@ -17,6 +17,7 @@ Bastion is independently maintained and is not affiliated with or supported by G
 | RSA public keys | Detect known weaknesses such as shared factors, ROCA, and vulnerable key-generation patterns. |
 | Elliptic-curve public keys | Check for weaknesses in EC key material. |
 | ECDSA signatures | Check for weaknesses in signature generation, including nonce reuse. |
+| RSA signatures | Factor the signer's key from a faulty signature. |
 | Pseudorandom output | Run randomness tests that can reveal flaws in generators. |
 
 Use the [check documentation](docs) to choose the checks appropriate to your data
@@ -25,6 +26,9 @@ means that check found no weakness; it does not prove that a key or generator is
 
 ## Differences from upstream
 
+- **RSA signature faults:** `CheckRSASignatureFault` factors the signer's key
+  from one faulty PKCS#1 v1.5 signature. See the
+  [check details](docs/rsa_signature_tests.md#checkrsasignaturefault).
 - **ECDSA nonce reuse:** `CheckNonceReuse` can recover a private key from two
   signatures from the same key that reuse a nonce. See the
   [check details](docs/ecdsa_signature_tests.md#checknoncereuse).

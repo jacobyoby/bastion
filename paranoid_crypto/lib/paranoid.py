@@ -27,6 +27,7 @@ from paranoid_crypto.lib import ec_aggregate_checks
 from paranoid_crypto.lib import ec_single_checks
 from paranoid_crypto.lib import ecdsa_sig_checks
 from paranoid_crypto.lib import rsa_aggregate_checks
+from paranoid_crypto.lib import rsa_sig_checks
 from paranoid_crypto.lib import rsa_single_checks
 
 T = TypeVar("T")
@@ -57,6 +58,8 @@ _ACTIVE_RSA_SINGLE_CHECKS = (
     rsa_single_checks.CheckKeypairDenylist,
 )
 
+_ACTIVE_RSA_SIG_CHECKS = (rsa_sig_checks.CheckRSASignatureFault,)
+
 _ACTIVE_RSA_AGGREGATE_CHECKS = (
     rsa_aggregate_checks.CheckGCD,
     rsa_aggregate_checks.CheckGCDN1,
@@ -82,6 +85,7 @@ _EC_SINGLES = "ec_singles"
 _EC_AGGREGATES = "ec_aggregates"
 _EC_ALL = "ec_all"
 _ECDSA_ALL = "ecdsa_all"
+_RSA_SIGS = "rsa_sigs"
 
 _check_factory = collections.defaultdict(dict)
 
@@ -130,6 +134,14 @@ def GetECAllChecks() -> dict[str, base_check.ECKeyCheck]:
     _check_factory[_EC_ALL].update(GetECSingleChecks())
     _check_factory[_EC_ALL].update(GetECAggregateChecks())
   return _check_factory[_EC_ALL]
+
+
+def GetRSASignatureChecks() -> dict[str, base_check.RSASignatureCheck]:
+  if not _check_factory[_RSA_SIGS]:
+    for test_class in _ACTIVE_RSA_SIG_CHECKS:
+      check = test_class()
+      _check_factory[_RSA_SIGS][check.check_name] = check
+  return _check_factory[_RSA_SIGS]
 
 
 def GetECDSAAllChecks() -> dict[str, base_check.ECDSASignatureCheck]:
@@ -237,4 +249,25 @@ def CheckAllECDSASigs(ecdsa_sigs: list[paranoid_pb2.ECDSASignature],
     logging.info("-------- Testing %d ECDSA signatures --------",
                  len(ecdsa_sigs))
   return _CheckArtifacts(ecdsa_sigs, list(GetECDSAAllChecks().items()),
+                         log_level)
+
+
+def CheckAllRSASigs(rsa_sigs: list[paranoid_pb2.RSASignature],
+                    log_level: int = 0) -> bool:
+  """Runs all checks on the RSA signatures.
+
+  Args:
+    rsa_sigs: A list of RSA signatures. Each signature is a
+      paranoid_pb2.RSASignature protobuf with rsa_sig_info.s,
+      rsa_sig_info.algorithm, rsa_sig_info.message_hash and the issuer key's
+      issuer_key_info.n and issuer_key_info.e set.
+    log_level: 0: only prints existing logging of the library
+               1: prints additional info stats about the checks
+
+  Returns:
+    Whether at least one of the signatures is potentially weak.
+  """
+  if log_level >= 1:
+    logging.info("-------- Testing %d RSA signatures --------", len(rsa_sigs))
+  return _CheckArtifacts(rsa_sigs, list(GetRSASignatureChecks().items()),
                          log_level)
