@@ -16,9 +16,8 @@
 import array
 from collections.abc import Iterator
 import math
-import gmpy2 as gmpy
 import numpy
-from scipy import fftpack as scipy_fft
+from scipy import fft as scipy_fft
 from scipy import special as scipy_special
 from scipy import stats as scipy_stats
 
@@ -26,15 +25,13 @@ from scipy import stats as scipy_stats
 def BitCount(s: int) -> int:
   """Counts the number of bits in an integer.
 
-  Python 3.10 will allow to use s.bit_count().
-
   Args:
     s: a non-negative integer
 
   Returns:
     the number of 1 bits in s.
   """
-  return gmpy.popcount(s)
+  return s.bit_count()
 
 
 def Igamc(a: float, x: float) -> float:

@@ -7,6 +7,16 @@ Changes in Bastion since it forked from Google's
 
 ## Unreleased
 
+### Changed
+
+- **Python 3.11+ packaging.** The build is declared in `pyproject.toml`.
+  `distutils`, removed in Python 3.12, is no longer used. Runtime dependencies
+  now include `gmpy2`, `fpylll`, `cysignals`, and `numpy`. Protocol buffers are compiled
+  with the protoc shipped by `grpcio-tools` against `protobuf` 7, so install
+  does not need a system `protoc` or the `protobuf==3.20.*` pin.
+- **Randomness tests.** `BitCount` uses `int.bit_count()`. The discrete Fourier
+  transform uses `scipy.fft` instead of the legacy `scipy.fftpack`.
+
 ### Added
 
 - **SSH public keys.** `ssh_keys` parses lines of OpenSSH authorized_keys and

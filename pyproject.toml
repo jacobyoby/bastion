@@ -1,0 +1,65 @@
+[build-system]
+requires = [
+    "setuptools>=77",
+    "pybind11>=2.13",
+    # Ships a protoc that matches the protobuf 7 runtime below.
+    "grpcio-tools>=1.85,<1.86",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paranoid_crypto"
+dynamic = ["version"]
+description = "Checks for known weaknesses in cryptographic keys, signatures, and pseudorandom output."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Paranoid Developers", email = "paranoid@google.com"},
+]
+maintainers = [
+    {name = "Jacob Durham", email = "jacob@jacobrakai.org"},
+]
+keywords = ["bastion", "paranoid", "cryptography"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "absl-py",
+    "cryptography",
+    "cysignals",
+    "fpylll",
+    "gmpy2",
+    "numpy",
+    "protobuf>=7.35.1,<8",
+    "scipy",
+    "sympy",
+]
+
+[project.urls]
+Homepage = "https://github.com/jacobyoby/bastion"
+Repository = "https://github.com/jacobyoby/bastion"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.dynamic]
+version = {file = "paranoid_crypto/VERSION"}
+
+[tool.setuptools.packages.find]
+include = ["paranoid_crypto*"]
+
+[tool.setuptools.package-data]
+paranoid_crypto = [
+    "VERSION",
+    "*.proto",
+    "lib/data/*.proto",
+    "lib/data/*.dat",
+    "lib/data/*.lzma",
+    "lib/data/*.LICENSE",
+]
