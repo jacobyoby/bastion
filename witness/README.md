@@ -12,7 +12,9 @@ From the repository root (with dependencies installed or `pip install .`):
 PYTHONPATH=. python -m witness.web
 ```
 
-Open [http://127.0.0.1:8770/](http://127.0.0.1:8770/). Leave the SSH, browser, and installed-app boxes checked, or add paths, optionally enter a TLS hostname, and click **Run witness checks**.
+Open [http://127.0.0.1:8770/](http://127.0.0.1:8770/). Browsers, installed apps, and SSH start selected; a TLS hostname is optional. Click **Confirm this machine**.
+
+The confirmation screen leads with Confirmed, Needs attention, or Incomplete, then a card for browsers, installed apps, and SSH.
 
 Summary states:
 

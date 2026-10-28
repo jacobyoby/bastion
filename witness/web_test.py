@@ -33,6 +33,24 @@ def _fake_report():
   }
 
 
+def _local_section(requested=True, none_found=False, weak=0, keys=0):
+  return {
+      'requested': requested,
+      'none_found': none_found,
+      'discovered': [],
+      'packages': None,
+      'keys': [],
+      'skipped': [],
+      'unreadable': [],
+      'private_skipped': [],
+      'unsupported': [],
+      'notes': [],
+      'weak_count': weak,
+      'key_count': keys,
+      'files_read': 0,
+  }
+
+
 def _handler():
   handler = web.WitnessHTTPRequestHandler.__new__(web.WitnessHTTPRequestHandler)
   handler.path = '/'
@@ -57,10 +75,28 @@ class WitnessWebTest(unittest.TestCase):
     text = body.decode('utf-8')
     self.assertEqual(_code, 200)
     self.assertIn('Witness this machine', text)
-    self.assertIn('Run witness checks', text)
-    self.assertIn('Scan SSH', text)
-    self.assertIn('Scan browsers', text)
-    self.assertIn('Scan installed apps', text)
+    self.assertIn(
+        'Checks public keys and certificates on this computer, '
+        'then confirms the result.',
+        text)
+    self.assertIn('Confirm this machine', text)
+    self.assertIn('Chrome, Chromium, Edge, Firefox', text)
+    self.assertIn('package list and public certs in app config', text)
+    self.assertIn('authorized_keys and known_hosts', text)
+    self.assertNotIn('Run witness checks', text)
+    self.assertNotIn('Scan SSH', text)
+    self.assertGreaterEqual(text.count(' checked'), 3)
+
+  def test_landing_mentions_browsers_and_apps_before_results(self):
+    handler = _handler()
+    handler.do_GET()
+    text = handler._last[1].decode('utf-8')
+    self.assertIn('Browsers', text)
+    self.assertIn('Installed apps', text)
+    self.assertLess(text.index('Browsers'), text.index('Installed apps'))
+    self.assertNotIn('id="results"', text)
+    self.assertNotIn('id="confirmation"', text)
+    self.assertNotIn('No weak public keys', text)
 
   def test_post_empty_scan_rejected(self):
     handler = _handler()
@@ -160,11 +196,101 @@ class WitnessWebTest(unittest.TestCase):
     self.assertIn('CheckSizes', text)
     self.assertIn('Medium', text)
     self.assertIn('Needs attention', text)
-    self.assertIn('Skipped — not a pass.', text)
+    self.assertIn('1 key needs attention in Browsers.', text)
+    self.assertIn(
+        'Public root certificates were counted, not weakness-scanned.', text)
+    self.assertIn('This is not a pass.', text)
     self.assertIn('full weakness scan not run', text)
+    self.assertIn('class="skip"', text)
+    panel, _, _rest = text.partition('id="results"')
+    self.assertNotIn('Public root certificates were counted', panel)
     self.assertIn('Installed apps', text)
-    self.assertIn('No weak keys in the files we could read', text)
+    self.assertIn('No public keys in app configs', text)
     self.assertIn('openssl', text)
+    self.assertNotIn('id="result-tls"', text)
+
+  def test_confirmation_sentences(self):
+    report = _fake_report()
+    report['browsers'] = _local_section(none_found=True)
+    report['apps'] = _local_section()
+    report['ssh'] = {
+        'requested': True,
+        'sources': [],
+        'keys': [],
+        'unsupported': [],
+        'weak_count': 0,
+        'key_count': 0,
+    }
+    text = web._page(None, report, None).decode('utf-8')
+    self.assertLess(text.index('id="confirmation"'), text.index('id="results"'))
+    self.assertIn('class="status status-ok"', text)
+    self.assertIn(
+        'No weak public keys in the browsers, apps, and SSH files we could read.',
+        text)
+    self.assertIn('No browser install found', text)
+    self.assertIn('No public keys in app configs', text)
+    browsers = text.split('id="result-browsers"', 1)[1].split(
+        'id="result-apps"', 1)[0]
+    self.assertNotIn('badge-clean', browsers)
+    self.assertIn('badge-skip', browsers)
+
+    report['overall_status'] = 'needs_attention'
+    report['apps']['weak_count'] = 1
+    report['apps']['key_count'] = 1
+    text = web._page(None, report, None).decode('utf-8')
+    self.assertIn('status-warn', text)
+    self.assertIn('1 key needs attention in Installed apps.', text)
+
+  def test_incomplete_panel_is_blue(self):
+    report = _fake_report()
+    report['overall_status'] = 'incomplete'
+    report['browsers'] = _local_section(requested=False)
+    report['apps'] = _local_section(requested=False)
+    report['ssh'] = {
+        'requested': True,
+        'sources': [{
+            'path': '/tmp/x',
+            'status': 'unreadable',
+            'error': 'denied',
+            'rsa_count': 0,
+            'ec_count': 0,
+            'unsupported_count': 0,
+        }],
+        'keys': [],
+        'unsupported': [],
+        'weak_count': 0,
+        'key_count': 0,
+    }
+    text = web._page(None, report, None).decode('utf-8')
+    self.assertIn('class="status status-incomplete"', text)
+    self.assertIn('Incomplete', text)
+    self.assertIn(
+        'A file in SSH could not be read, so this confirmation is incomplete.',
+        text)
+    self.assertNotIn('class="status status-ok"', text)
+
+  def test_tls_card_only_when_host_requested(self):
+    report = _fake_report()
+    report['browsers'] = _local_section(requested=False)
+    report['apps'] = _local_section(requested=False)
+    report['ssh'] = {'requested': False, 'sources': [], 'keys': []}
+    hidden = web._page(None, report, None).decode('utf-8')
+    self.assertNotIn('id="result-tls"', hidden)
+    report['tls'] = {
+        'requested': True,
+        'skipped': False,
+        'host': 'example.com',
+        'port': 443,
+        'exit_code': 0,
+        'report': {'checks': [{
+            'name': 'leaf',
+            'status': 'pass',
+            'reason': 'name matched',
+        }]},
+    }
+    shown = web._page(None, report, None).decode('utf-8')
+    self.assertIn('id="result-tls"', shown)
+    self.assertIn('example.com', shown)
 
 
 if __name__ == '__main__':

@@ -91,13 +91,14 @@ Mirror tlscheck: presented/fetched path, leaf fingerprint, and each named check 
 
 ## 6. UI/UX
 
-Single-page flow:
+The page is a confirmation screen for this machine, not a single-column path-paste form.
 
-1. **Witness this machine** — form defaults: scan SSH, scan browsers, and scan installed apps on; optional extra SSH paths; optional TLS host/port.
-2. **Run witness checks** — show a simple progress state (form POST).
-3. **Summary banner** — Confirmed (green), Needs attention (amber), or Incomplete (neutral/warning) with one plain-language sentence. The sentence does not treat skipped system roots as a pass.
-4. **Expandable sections** — Browsers, Installed apps, SSH, TLS. Weak keys show fingerprint, path, failed check, and severity. A clean section says “No weak keys in the files we could read.”
-5. **Mobile-friendly** — responsive CSS, large tap targets, wrapping fingerprints, no horizontal scroll for summaries.
+1. **Witness this machine** — one sentence: checks public keys and certificates on this computer, then confirms the result.
+2. Three large cards, on by default: **Browsers** (Chrome, Chromium, Edge, Firefox), **Installed apps** (package list and public certs in app config), and **SSH** (`authorized_keys` and `known_hosts`). Optional TLS host is a small secondary field. Extra SSH paths stay available and are not the main control.
+3. **Confirm this machine** posts the form (127.0.0.1 only).
+4. After a run, the first thing on the page is a large status panel: **Confirmed** (green), **Needs attention** (amber), or **Incomplete** (blue), with one plain sentence. Examples: “No weak public keys in the browsers, apps, and SSH files we could read.” and “1 key needs attention in Installed apps.” The sentence does not treat skipped system roots as a pass.
+5. Result cards for Browsers, Installed apps, and SSH show a count and a short status (clean / N need attention / skipped). Files and failed checks expand under the card. TLS appears only when a host was entered. The system CA bundle says “Public root certificates were counted, not weakness-scanned.” and is not a green pass. “No browser install found” and “No public keys in app configs” are informational, not errors.
+6. **Mobile-friendly** — cards stack on a narrow screen. Large tap targets. Fingerprints wrap.
 
 **Errors** — human messages only (permission denied, connection failed). No stack traces in the browser.
 
