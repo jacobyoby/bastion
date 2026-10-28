@@ -35,6 +35,16 @@ the operating system trust store.
 PYTHONPATH=. python -m tlscheck example.com
 ```
 
+## witness
+
+[witness](witness/README.md) is an alpha **localhost** UI that scans public SSH
+material on this machine (and optionally runs tlscheck against a hostname you
+supply). See the [design doc](docs/witness_design.md).
+
+```sh
+PYTHONPATH=. python -m witness.web
+```
+
 ## Differences from upstream
 
 - **SSH public keys:** `ssh_keys.ParseAuthorizedKeys` and
