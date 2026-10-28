@@ -34,7 +34,9 @@ Changes in Bastion since it forked from Google's
   short or non-NIST keys, enforces the 398-day leaf lifetime, matches names
   by RFC 9525 with no commonName fallback, and checks a stapled OCSP response
   when one is present. OCSP and CRL downloads are opt-in. There is no
-  Certificate Transparency check and the OS trust store is not used. See
+  Certificate Transparency check and the OS trust store is not used. A local
+  web page, `python -m tlscheck.web`, binds to 127.0.0.1 port 8765 and shows
+  one check. It has no accounts and keeps no history. See
   [tlscheck/README.md](tlscheck/README.md).
 - **SSH public keys.** `ssh_keys` parses lines of OpenSSH authorized_keys and
   known_hosts files, such as `*.pub` files and ssh-keyscan output, into
