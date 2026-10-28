@@ -24,3 +24,7 @@ jobs:
         # imported. The repository root is a package parent and would shadow it.
         run: python -m unittest discover -b -p "*test.py"
         working-directory: paranoid_crypto
+      - name: Test tlscheck
+        # tlscheck is a separate package. Run it from the repository root so
+        # `python -m tlscheck` and `import tlscheck` resolve the same tree.
+        run: python -m unittest tlscheck.tlscheck_test

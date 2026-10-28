@@ -1,4 +1,5 @@
 absl-py
+certifi
 cryptography
 cysignals
 fpylll
