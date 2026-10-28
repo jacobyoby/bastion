@@ -86,19 +86,21 @@ cd bastion
 
 #### Debian
 
-**NOTE**: Upstream tested the commands below on Debian 12 (bookworm). Make sure
-you will be using `python3.11` or newer.
+**NOTE**: Use Python 3.11 or newer. Installation compiles a small C++ extension,
+so a C++ compiler and Python headers are required. `gmpy2`, `fpylll`,
+`cysignals`, and a protobuf compiler that matches the runtime are installed
+by pip.
 
-Install dependencies:
+Install system packages:
 
 ```sh
-sudo apt update && sudo apt install python3 python3-full python3-pip python3-pybind11 python3-fpylll python3-gmpy2 protobuf-compiler
+sudo apt update && sudo apt install python3 python3-full python3-pip build-essential
 ```
 
 Create and activate a virtual environment:
 
 ```sh
-python3 -m venv --system-site-packages ~/paranoid-venv
+python3 -m venv ~/paranoid-venv
 ```
 
 ```sh
@@ -119,20 +121,13 @@ cd paranoid_crypto && python3 -m unittest discover -b -p "*test.py"
 
 #### macOS (Apple Silicon)
 
-This setup uses Homebrew and [uv](https://docs.astral.sh/uv/). The
-pinned `protobuf==3.20.*` runtime needs an older protoc than Homebrew ships. These
-steps use the matching protoc 3.20.3, whose release has no Apple Silicon binary,
-so the x86_64 binary runs under Rosetta (`softwareupdate --install-rosetta` if it
-is missing).
+This setup uses [uv](https://docs.astral.sh/uv/). Install it with Homebrew if
+you do not already have it (`brew install uv`). The C++ extension needs the
+Xcode command line tools (`xcode-select --install`).
 
 ```sh
-brew install fplll
-uv venv -p 3.11 .venv
-curl -L -o /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v3.20.3/protoc-3.20.3-osx-x86_64.zip
-unzip -o /tmp/protoc.zip -d .venv/protoc
-export CPATH=/opt/homebrew/include LIBRARY_PATH=/opt/homebrew/lib PROTOC=$PWD/.venv/protoc/bin/protoc
-uv pip install -p .venv -r requirements.txt pybind11 setuptools gmpy2 cysignals fpylll
-uv pip install -p .venv --no-build-isolation -e .
+uv venv -p 3.12 .venv
+uv pip install -p .venv -e .
 ```
 
 Verify the installation by running the unit tests:

@@ -1,5 +1,9 @@
 absl-py
 cryptography
-protobuf==3.20.*
+cysignals
+fpylll
+gmpy2
+numpy
+protobuf>=7.35.1,<8
 scipy
 sympy
