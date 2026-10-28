@@ -14,6 +14,7 @@
 """Local witness web UI on 127.0.0.1."""
 
 import argparse
+import datetime
 import html
 import http.server
 import socketserver
@@ -27,6 +28,10 @@ DEFAULT_PORT = 8770
 MAX_BODY_BYTES = 65536
 MAX_EXTRA_PATHS = 32
 MAX_PATH_LEN = 4096
+_MONTHS = (
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+)
 
 # Tests may replace this hook.
 WITNESS_RUNNER: Callable[..., dict] = witness_machine
@@ -35,97 +40,124 @@ _CSP = ("default-src 'self'; style-src 'self' 'unsafe-inline'; "
         "base-uri 'none'; form-action 'self'")
 
 _PAGE_CSS = """
-body{font-family:system-ui,sans-serif;margin:0 auto;padding:1.25rem;
-max-width:68rem;line-height:1.45;color:#1a1a1a;background:#eef1f5}
-h1{font-size:1.7rem;margin:0 0 .35rem;letter-spacing:-.02em}
-h2{font-size:1.15rem;margin:0}
-h3{font-size:1rem;margin:1rem 0 .35rem}
-.sub{color:#243040;margin:0;font-size:1.05rem;max-width:40rem}
-.intro{margin:0 0 1.25rem}
-form{background:transparent;border:0;padding:0;margin:0}
-fieldset.choices{border:0;margin:0;padding:0;display:grid;
-grid-template-columns:repeat(3,minmax(0,1fr));gap:.85rem}
-legend{grid-column:1 / -1;font-weight:700;font-size:1rem;padding:0;margin:0}
-label{display:block;font-weight:600;margin:.75rem 0 .25rem}
-label.choice{display:flex;flex-direction:column;align-items:flex-start;gap:.35rem;
-margin:0;min-height:8.5rem;padding:1.05rem 1rem 1rem;font-weight:400;
-border:2px solid #d0d7e2;border-radius:16px;background:#fff;cursor:pointer;
-box-sizing:border-box}
-label.choice input{width:1.3rem;height:1.3rem;margin:0 0 .45rem;accent-color:#1a5fb4}
-label.choice:hover{border-color:#8eabcf}
-label.choice:has(input:checked){border-color:#1a5fb4;background:#f2f7fd;
-box-shadow:inset 0 0 0 1px #1a5fb4}
-label.choice:focus-within{outline:2px solid #1a5fb4;outline-offset:2px}
-.choice-title{font-size:1.28rem;font-weight:700;letter-spacing:-.02em}
-.choice-desc{color:#243040;font-size:1rem}
+body{margin:0;background:#cfc3b1;color:#1a1612;line-height:1.45;
+font-family:"Liberation Serif","DejaVu Serif",Georgia,Palatino,serif}
+.sheet{max-width:40rem;margin:1.75rem auto;background:#f7f3ea;
+padding:2.15rem 2.3rem 1.6rem;border:1px solid #1a1612;
+box-shadow:0 0 0 7px #f7f3ea,0 0 0 8px #1a1612}
+.kicker{margin:0;letter-spacing:.18em;text-transform:uppercase;font-size:.72rem}
+h1{font-size:clamp(1.7rem,4vw,2.15rem);font-weight:500;margin:.15rem 0 0;
+letter-spacing:-.02em;line-height:1.15}
+h2{font-size:1.12rem;margin:0;font-weight:600}
+h3{font-size:1rem;margin:.85rem 0 .3rem}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;
+align-items:flex-start;gap:.75rem 1.25rem}
+.identity{flex:1 1 16rem;min-width:0}
+.lead,.status-reason{font-size:1.12rem;margin:.9rem 0 1rem}
+.stamp{margin:.2rem 0 .35rem auto;flex:0 1 auto;transform:rotate(-7deg);
+border:4px solid currentColor;outline:1px solid currentColor;outline-offset:4px;
+padding:.4rem .7rem .28rem;text-align:center;
+font-family:"Liberation Sans","DejaVu Sans",sans-serif;font-weight:800;
+letter-spacing:.1em;text-transform:uppercase;
+font-size:clamp(1.15rem,2.4vw,1.5rem);line-height:1.05}
+.stamp small{display:block;margin-top:.28rem;
+font-family:"Liberation Serif",Georgia,serif;font-weight:400;
+letter-spacing:.08em;font-size:.7rem}
+.stamp-blank{color:#6e675e;border-style:dashed;outline:none}
+.status-ok{color:#0f5c32}
+.status-warn{color:#8a4b08}
+.status-incomplete{color:#0c3a5e}
+hr.rule{border:0;border-top:1px solid #1a1612;border-bottom:3px solid #1a1612;
+height:3px;margin:.15rem 0 1rem}
+dl.facts{display:grid;grid-template-columns:7.2rem 1fr;gap:.2rem .75rem;
+margin:0 0 1.05rem}
+dt{margin:0;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;
+padding-top:.18rem}
+dd{margin:0}
+.ledger{border-top:1px solid #1a1612;margin:0}
+.entry{border-bottom:1px solid #1a1612;padding:.85rem 0 .95rem}
+.entry-head{display:flex;justify-content:space-between;gap:.75rem;
+align-items:baseline}
+.mark{margin:0;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;
+font-family:"Liberation Sans","DejaVu Sans",sans-serif;font-weight:700}
+.mark-ok{color:#0f5c32}
+.mark-warn{color:#8a4b08}
+.mark-incomplete{color:#0c3a5e}
+.mark-skip{color:#3f382f}
+.count,.note{margin:.3rem 0 0}
+.note{margin-top:.35rem}
+form{margin:0}
+fieldset.cover{border:0;margin:0;padding:0}
+fieldset.cover legend{font-weight:700;font-size:1rem;padding:0;margin:0 0 .15rem}
+label.line{display:grid;grid-template-columns:1.35rem 1fr;column-gap:.7rem;
+align-items:start;padding:.7rem 0;border-bottom:1px solid #d9d0c2;cursor:pointer}
+label.line input{width:1.25rem;height:1.25rem;margin:.2rem 0 0;accent-color:#1a1612}
+label.line:focus-within{outline:2px solid #1a1612;outline-offset:2px}
+.line-title{display:block;font-weight:700;font-size:1.05rem}
+.line-desc{display:block;color:#3f382f}
 .tls{margin-top:1rem}
-.tls label{font-weight:500;color:#444;font-size:.95rem;margin:0 0 .35rem}
-.tls-row{display:flex;gap:.5rem}
-.tls-row input[type=number]{width:6.5rem;flex:none}
+.tls label{display:block;font-weight:700;margin:0 0 .35rem}
+.tls-row{display:flex;gap:.75rem;align-items:flex-end}
+.tls-row input[type=text]{flex:1;min-width:0}
+.tls-row input[type=number]{width:5.5rem;flex:none}
 input[type=text],input[type=number],textarea{width:100%;box-sizing:border-box;
-padding:.55rem .65rem;border:1px solid #c5ced8;border-radius:8px;font:inherit;
-background:#fff}
-textarea{min-height:4.5rem;font-family:ui-monospace,monospace}
-details.extra{margin-top:.85rem;background:#fff;border:1px solid #d5dbe3;
-border-radius:12px;padding:.45rem .9rem}
-details.extra summary{font-weight:600;color:#333}
-button.primary{margin-top:1.15rem;padding:.9rem 1.45rem;font:inherit;
-font-size:1.05rem;font-weight:700;border:0;border-radius:12px;background:#1a5fb4;
-color:#fff;cursor:pointer;width:auto;min-width:16rem}
-button.primary:hover{background:#1c71d8}
-.status{padding:1.35rem 1.4rem 1.3rem;border-radius:18px;margin:0 0 1.15rem}
-.status-label{font-size:clamp(2.1rem,6vw,3rem);font-weight:700;margin:0;
-letter-spacing:-.03em;line-height:1.05}
-.status-reason{font-size:1.2rem;margin:.55rem 0 0;font-weight:500;max-width:42rem}
-.status-ok{background:#e3f7eb;border:2px solid #1b8a45;color:#0e3d24}
-.status-warn{background:#fff4df;border:2px solid #d4880f;color:#5c3b00}
-.status-incomplete{background:#e7f3fc;border:2px solid #1a73b8;color:#0c3a5e}
-.results{display:grid;grid-template-columns:1fr;gap:.85rem;margin:0 0 1.5rem}
-.result{background:#fff;border:1px solid #d5dbe3;border-radius:16px;
-padding:1rem;min-width:0}
-.result-wide{grid-column:1 / -1}
-.result-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:.35rem .7rem;
-margin-bottom:.35rem}
-.count{margin:0;color:#243040}
-.badge{margin:0 0 0 auto;font-weight:700;font-size:.82rem;padding:.2rem .6rem;
-border-radius:999px}
-.badge-clean{background:#e7f6ee;color:#146c3a}
-.badge-warn{background:#fff1d6;color:#6a3d00}
-.badge-skip{background:#eef1f4;color:#3d4752}
-.badge-incomplete{background:#e7f2fb;color:#0c3458}
-.err{color:#7a1f1f;background:#fadbd8;padding:.75rem;border-radius:8px;margin:.5rem 0}
-.info{background:#f4f7fb;border:1px solid #d5deea;color:#1e2a36;border-radius:10px;
-padding:.7rem .8rem;margin:.7rem 0}
-.skip{background:#f3f4f6;border:1px solid #9aa3ad;color:#1f2933;border-radius:10px;
-padding:.7rem .8rem;margin:.7rem 0}
-.weak{background:#fff4df;border:1px solid #e0a14a;border-radius:10px;
-padding:.35rem .75rem;margin:.55rem 0}
-details.files{background:#f8fafc;border:1px solid #e1e6ee;border-radius:10px;
-padding:.45rem .75rem;margin:.75rem 0 0}
-.weak details,details.extra details{border:0;background:transparent;padding:0;margin:0}
+background:transparent;border:0;border-bottom:1px solid #1a1612;border-radius:0;
+font:inherit;color:inherit;padding:.4rem 0}
+textarea{min-height:4.5rem;font-family:"Liberation Mono",ui-monospace,monospace}
+details.extra{margin-top:.85rem}
+details.again{margin-top:1.1rem;border-top:1px solid #d9d0c2;padding-top:.55rem}
+details.fine{margin-top:.65rem}
 summary{cursor:pointer;font-weight:600}
+button.primary{margin-top:1.15rem;padding:.85rem 1.15rem;font:inherit;
+font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:transparent;
+color:#1a1612;border:3px solid #1a1612;border-radius:0;cursor:pointer}
+button.primary:hover{background:#1a1612;color:#f7f3ea}
+button.primary:focus-visible{outline:2px solid #1a1612;outline-offset:3px}
+.err{color:#6e1d16;border-left:3px solid #6e1d16;padding:.15rem 0 .15rem .7rem;
+margin:.6rem 0}
+.skip{margin:.5rem 0 0;padding:.1rem 0 .1rem .7rem;border-left:3px solid #1a1612}
+.weak{border-left:3px solid #8a4b08;padding:.15rem 0 .15rem .7rem;margin:.55rem 0}
+.key{border-left:3px solid #cfc4b4;padding:.15rem 0 .15rem .7rem;margin:.55rem 0}
 table{width:100%;border-collapse:collapse;font-size:.9rem}
-th,td{border-bottom:1px solid #eee;padding:.4rem;text-align:left;vertical-align:top}
-tr.fail td{color:#7a1f1f}
-.meta{font-size:.85rem;color:#526070}
-.run-meta{margin:-.4rem 0 1.15rem}
-.fp{font-family:ui-monospace,monospace;overflow-wrap:anywhere}
-.footer{margin:1.5rem 0 0;color:#526070;font-size:.9rem}
-ul{margin:.35rem 0 .75rem;padding-left:1.2rem}
+th,td{border-bottom:1px solid #e4dccd;padding:.35rem .2rem;text-align:left;
+vertical-align:top}
+tr.fail td{color:#6e1d16}
+.meta{font-size:.88rem;color:#3f382f}
+.fp{font-family:"Liberation Mono",ui-monospace,monospace;overflow-wrap:anywhere;
+font-size:.88rem}
+.footer{margin:1.15rem 0 0;color:#3f382f;font-size:.88rem}
 @media (max-width:40rem){
-  body{padding:.75rem}
-  fieldset.choices,.results{grid-template-columns:1fr}
+  body{padding:.55rem}
+  .sheet{margin:.55rem auto;padding:1.15rem 1rem 1rem;
+  box-shadow:0 0 0 4px #f7f3ea,0 0 0 5px #1a1612}
+  .stamp{transform:none;letter-spacing:.06em;margin-left:0}
   button.primary{width:100%}
-  .tls-row{flex-direction:column}
+  .tls-row{flex-direction:column;align-items:stretch}
   .tls-row input[type=number]{width:100%}
   table{display:block;overflow-x:auto}
-  label.choice{min-height:0}
 }
 """
 
 
 def _escape(value) -> str:
   return html.escape('' if value is None else str(value))
+
+
+def _witnessed_when(raw) -> str:
+  text = '' if raw is None else str(raw)
+  if not text:
+    return ''
+  try:
+    parsed = datetime.datetime.fromisoformat(text)
+  except ValueError:
+    return text
+  zone = ''
+  if parsed.tzinfo is not None:
+    parsed = parsed.astimezone(datetime.timezone.utc)
+    zone = ' UTC'
+  month = _MONTHS[parsed.month - 1]
+  return (f'{parsed.day:02d} {month} {parsed.year}, '
+          f'{parsed.hour:02d}:{parsed.minute:02d}{zone}')
 
 
 def _status_view(status: str) -> tuple[str, str]:
@@ -325,11 +357,12 @@ def _plain_reason(report: dict) -> str:
 def _choice(name: str, title: str, description: str, checked: bool) -> str:
   mark = ' checked' if checked else ''
   return (
-      '<label class="choice">'
+      '<label class="line">'
       f'<input type="checkbox" name="{name}" value="on"{mark}>'
-      f'<span class="choice-title">{_escape(title)}</span>'
-      f'<span class="choice-desc">{_escape(description)}</span>'
-      '</label>')
+      '<span class="line-body">'
+      f'<span class="line-title">{_escape(title)}</span>'
+      f'<span class="line-desc">{_escape(description)}</span>'
+      '</span></label>')
 
 
 def _grouped(keys: list[dict]) -> list[tuple[str, list[dict]]]:
@@ -393,19 +426,30 @@ def _render_keys(keys: list[dict], hide_group: str | None = None) -> list[str]:
   return parts
 
 
-def _card_badge(section: dict, kind: str) -> tuple[str, str]:
+def _has_not_a_pass(section: dict) -> bool:
+  for item in section.get('skipped') or []:
+    if item.get('not_a_pass'):
+      return True
+    if 'not a pass' in str(item.get('reason') or '').lower():
+      return True
+  return False
+
+
+def _line_mark(section: dict, kind: str) -> tuple[str, str]:
   if not _section_requested(section, kind):
-    return 'badge-skip', 'skipped'
+    return 'mark-skip', 'Not included'
   weak = _weak_count(section)
   if weak == 1:
-    return 'badge-warn', '1 needs attention'
+    return 'mark-warn', '1 needs attention'
   if weak > 1:
-    return 'badge-warn', f'{weak} need attention'
+    return 'mark-warn', f'{weak} need attention'
   if _unreadable_items(section, kind):
-    return 'badge-incomplete', 'incomplete'
+    return 'mark-incomplete', 'Incomplete'
   if kind == 'browsers' and section.get('none_found'):
-    return 'badge-skip', 'skipped'
-  return 'badge-clean', 'clean'
+    return 'mark-skip', 'Not a failure'
+  if _has_not_a_pass(section):
+    return 'mark-skip', 'Not a pass'
+  return 'mark-ok', 'Witnessed'
 
 
 def _count_label(section: dict, kind: str) -> str:
@@ -423,14 +467,8 @@ def _count_label(section: dict, kind: str) -> str:
 
 
 def _details_open(section: dict, kind: str) -> bool:
-  if _weak_count(section) or _unreadable_items(section, kind):
-    return True
-  if (section.get('skipped') or section.get('private_skipped')
-      or section.get('keys')):
-    return True
-  if kind == 'ssh' and section.get('sources'):
-    return True
-  return False
+  """Open fine print when a line needs reading, not on a clean sheet."""
+  return bool(_weak_count(section) or _unreadable_items(section, kind))
 
 
 def _render_system_roots(items: list[dict]) -> list[str]:
@@ -471,13 +509,13 @@ def _render_other_skips(items: list[dict]) -> list[str]:
 
 def _render_empty(section: dict, kind: str) -> list[str]:
   if kind == 'browsers' and section.get('none_found'):
-    return ['<p class="info">No browser install found</p>']
+    return ['<p class="note">No browser install found</p>']
   if kind == 'apps' and _key_count(section) == 0 and not _weak_count(section):
-    return ['<p class="info">No public keys in app configs</p>']
+    return ['<p class="note">No public keys in app configs</p>']
   if kind == 'ssh' and _key_count(section) == 0 and not _weak_count(section):
-    return ['<p class="info">No public keys in the SSH files we could read.</p>']
+    return ['<p class="note">No public keys in the SSH files we could read.</p>']
   if _weak_count(section) == 0:
-    return ['<p class="info">No weak keys in the files we could read.</p>']
+    return ['<p class="note">No weak keys in the files we could read.</p>']
   return []
 
 
@@ -505,7 +543,7 @@ def _render_packages(section: dict) -> list[str]:
       text += f'. Notable: {sample}'
     return [f'<p>{_escape(text)}.</p>']
   if packages.get('message'):
-    return [f'<p class="info">{_escape(packages.get("message"))}</p>']
+    return [f'<p class="note">{_escape(packages.get("message"))}</p>']
   return []
 
 
@@ -570,30 +608,25 @@ def _render_ssh_sources(section: dict) -> list[str]:
   return parts
 
 
-def _render_result_card(title: str, section: dict | None, kind: str) -> list[str]:
-  section = section or {}
-  badge_class, badge = _card_badge(section, kind)
-  parts = [
-      f'<article class="result" id="result-{kind}">',
-      '<header class="result-head">',
-      f'<h2>{_escape(title)}</h2>',
-      f'<p class="count">{_escape(_count_label(section, kind))}</p>',
-      f'<p class="badge {badge_class}">{_escape(badge)}</p>',
-      '</header>',
-  ]
-  if not _section_requested(section, kind):
-    parts.append('<p class="info">Not included in this confirmation.</p></article>')
-    return parts
-  parts.extend(_render_system_roots(section.get('skipped') or []))
-  parts.extend(_render_empty(section, kind))
-  parts.extend(_render_discovered(section))
-  parts.extend(_render_packages(section))
+def _has_fine_print(section: dict, kind: str) -> bool:
+  if section.get('keys') or section.get('private_skipped'):
+    return True
+  if section.get('unsupported') or section.get('notes'):
+    return True
+  if kind == 'ssh' and section.get('sources'):
+    return True
+  if _unreadable_items(section, kind):
+    return True
+  return False
+
+
+def _render_fine_print(section: dict, kind: str) -> list[str]:
+  if not _has_fine_print(section, kind):
+    return []
   open_attr = ' open' if _details_open(section, kind) else ''
-  parts.append(f'<details class="files"{open_attr}>')
-  parts.append('<summary>Files and checks</summary>')
+  parts = [f'<details class="fine"{open_attr}>', '<summary>Fine print</summary>']
   if kind == 'ssh':
     parts.extend(_render_ssh_sources(section))
-  parts.extend(_render_other_skips(section.get('skipped') or []))
   parts.extend(_render_problems(section, kind))
   parts.extend(_render_private(section))
   parts.extend(_render_unsupported(section, kind))
@@ -605,93 +638,143 @@ def _render_result_card(title: str, section: dict | None, kind: str) -> list[str
     parts.append(
         f'<p class="meta">{_key_count(section)} public keys checked, '
         f'{int(section.get("files_read") or 0)} files read.</p>')
-  parts.append('</details></article>')
+  parts.append('</details>')
   return parts
 
 
-def _render_tls_card(tls: dict | None) -> list[str]:
-  if not tls or not tls.get('requested'):
-    return []
+def _render_entry(title: str, section: dict | None, kind: str) -> list[str]:
+  section = section or {}
+  mark_class, mark = _line_mark(section, kind)
+  parts = [
+      f'<article class="entry" id="result-{kind}">',
+      '<header class="entry-head">',
+      f'<h2>{_escape(title)}</h2>',
+      f'<p class="mark {mark_class}">{_escape(mark)}</p>',
+      '</header>',
+  ]
+  if not _section_requested(section, kind):
+    parts.append(
+        '<p class="note">Not included in this confirmation.</p></article>')
+    return parts
+  parts.append(f'<p class="count">{_escape(_count_label(section, kind))}</p>')
+  parts.extend(_render_system_roots(section.get('skipped') or []))
+  parts.extend(_render_other_skips(section.get('skipped') or []))
+  parts.extend(_render_empty(section, kind))
+  parts.extend(_render_discovered(section))
+  parts.extend(_render_packages(section))
+  parts.extend(_render_fine_print(section, kind))
+  parts.append('</article>')
+  return parts
+
+
+def _tls_mark(tls: dict) -> tuple[str, str]:
   exit_code = tls.get('exit_code')
   if tls.get('skipped'):
-    badge_class, badge = 'badge-skip', 'skipped'
-  elif exit_code == 1:
-    badge_class, badge = 'badge-warn', '1 needs attention'
-  elif exit_code == 2 or exit_code is None:
-    badge_class, badge = 'badge-incomplete', 'incomplete'
-  else:
-    badge_class, badge = 'badge-clean', 'clean'
+    return 'mark-skip', 'Skipped'
+  if exit_code == 1:
+    return 'mark-warn', '1 needs attention'
+  if exit_code == 2 or exit_code is None:
+    return 'mark-incomplete', 'Incomplete'
+  return 'mark-ok', 'Witnessed'
+
+
+def _render_tls_entry(tls: dict | None) -> list[str]:
+  if not tls or not tls.get('requested'):
+    return []
+  mark_class, mark = _tls_mark(tls)
   host = tls.get('host') or ''
   port = tls.get('port')
   where = f'{host}:{port}' if host else 'TLS host'
   parts = [
-      '<article class="result result-wide" id="result-tls">',
-      '<header class="result-head">',
+      '<article class="entry" id="result-tls">',
+      '<header class="entry-head">',
       '<h2>TLS</h2>',
-      f'<p class="count">{_escape(where)}</p>',
-      f'<p class="badge {badge_class}">{_escape(badge)}</p>',
+      f'<p class="mark {mark_class}">{_escape(mark)}</p>',
       '</header>',
+      f'<p class="count">{_escape(where)}</p>',
   ]
   if tls.get('skipped') or not tls.get('report'):
     message = tls.get('message') or 'TLS check did not finish.'
     box = 'skip' if tls.get('skipped') else 'err'
     parts.append(f'<p class="{box}">{_escape(message)}</p>')
   else:
-    for check in tls['report'].get('checks') or []:
-      parts.append(
-          f'<p><strong>{_escape(check.get("name"))}</strong> '
-          f'{_escape(check.get("status"))} — '
-          f'{_escape(check.get("reason"))}</p>')
+    checks = tls['report'].get('checks') or []
+    if checks:
+      parts.append('<details class="fine" open><summary>Fine print</summary>')
+      for check in checks:
+        parts.append(
+            f'<p><strong>{_escape(check.get("name"))}</strong> '
+            f'{_escape(check.get("status"))} — '
+            f'{_escape(check.get("reason"))}</p>')
+      parts.append('</details>')
   parts.append('</article>')
   return parts
 
 
-def _render_status(report: dict) -> list[str]:
-  status = report.get('overall_status') or 'incomplete'
-  title, css = _status_view(status)
-  meta = (
-      f'Host {_escape(report.get("machine_hostname"))} · '
-      f'{_escape(report.get("timestamp"))} · Bastion '
-      f'{_escape(report.get("bastion_version"))} · witness '
-      f'{_escape(report.get("witness_version"))}'
-  )
+def _render_facts(report: dict) -> list[str]:
+  tool = (f'Bastion {_escape(report.get("bastion_version"))} · witness '
+          f'{_escape(report.get("witness_version"))}')
+  when = _escape(_witnessed_when(report.get('timestamp')))
   return [
-      f'<section class="{css}" id="confirmation" role="status">',
-      f'<p class="status-label">{title}</p>',
-      f'<p class="status-reason">{_escape(_plain_reason(report))}</p>',
-      '</section>',
-      f'<p class="meta run-meta">{meta}</p>',
+      '<dl class="facts">',
+      f'<dt>Machine</dt><dd>{_escape(report.get("machine_hostname"))}</dd>',
+      f'<dt>Witnessed</dt><dd>{when}</dd>',
+      f'<dt>Tool</dt><dd>{tool}</dd>',
+      '</dl>',
   ]
 
 
+def _render_sheet_head(report: dict | None) -> list[str]:
+  parts = [
+      '<header class="mast">',
+      '<div class="top">',
+      '<div class="identity">',
+      '<p class="kicker">Bastion witness · this computer only</p>',
+      '<h1>Certificate of inspection</h1>',
+      '</div>',
+  ]
+  if not report:
+    parts.append('<p class="stamp stamp-blank">Not yet issued</p></div>')
+    parts.append(
+        '<p class="lead">This computer has not been witnessed. '
+        'Confirm to issue a certificate for the public keys and '
+        'certificates on this machine.</p>')
+    parts.append('<hr class="rule"></header>')
+    return parts
+  title, css = _status_view(report.get('overall_status') or 'incomplete')
+  parts.append(
+      f'<p class="stamp {css}" id="confirmation" role="status">'
+      f'{_escape(title)}<small>Not signed</small></p></div>')
+  parts.append(
+      f'<p class="status-reason">{_escape(_plain_reason(report))}</p>')
+  parts.extend(_render_facts(report))
+  parts.append('<hr class="rule"></header>')
+  return parts
+
+
 def _render_results(report: dict) -> list[str]:
-  parts = ['<section class="results" id="results">']
-  parts.extend(_render_result_card('Browsers', report.get('browsers'), 'browsers'))
-  parts.extend(_render_result_card(
-      'Installed apps', report.get('apps'), 'apps'))
-  parts.extend(_render_result_card('SSH', report.get('ssh'), 'ssh'))
-  parts.extend(_render_tls_card(report.get('tls')))
+  parts = ['<section class="ledger" id="results">']
+  parts.extend(_render_entry('Browsers', report.get('browsers'), 'browsers'))
+  parts.extend(_render_entry('Installed apps', report.get('apps'), 'apps'))
+  parts.extend(_render_entry('SSH', report.get('ssh'), 'ssh'))
+  parts.extend(_render_tls_entry(report.get('tls')))
   parts.append('</section>')
   return parts
 
 
-def _render_intro() -> list[str]:
-  return [
-      '<header class="intro">',
-      '<h1>Witness this machine</h1>',
-      '<p class="sub">Checks public keys and certificates on this computer, '
-      'then confirms the result.</p>',
-      '</header>',
-  ]
-
-
-def _render_form(form: dict) -> list[str]:
+def _render_form(form: dict, again: bool = False) -> list[str]:
   extra_text = '\n'.join(form.get('extra_paths') or [])
   extra_open = ' open' if extra_text else ''
-  return [
+  parts = []
+  if again:
+    parts.extend([
+        '<details class="again">',
+        '<summary>Witness again</summary>',
+    ])
+  parts.extend([
       '<form method="POST" action="/">',
-      '<fieldset class="choices">',
-      '<legend>On this machine</legend>',
+      '<fieldset class="cover">',
+      '<legend>What this certificate will cover</legend>',
       _choice(
           'scan_browsers', 'Browsers',
           'Chrome, Chromium, Edge, Firefox',
@@ -706,7 +789,7 @@ def _render_form(form: dict) -> list[str]:
           bool(form.get('scan_ssh', True))),
       '</fieldset>',
       '<div class="tls">',
-      '<label for="tls_host">Optional TLS host</label>',
+      '<label for="tls_host">Also witness a TLS name (optional)</label>',
       '<div class="tls-row">',
       f'<input id="tls_host" name="tls_host" type="text" '
       f'value="{_escape(form.get("tls_host"))}" '
@@ -724,7 +807,10 @@ def _render_form(form: dict) -> list[str]:
       '</details>',
       '<button class="primary" type="submit">Confirm this machine</button>',
       '</form>',
-  ]
+  ])
+  if again:
+    parts.append('</details>')
+  return parts
 
 
 def _page(form: dict | None, report: dict | None, error: str | None) -> bytes:
@@ -733,21 +819,19 @@ def _page(form: dict | None, report: dict | None, error: str | None) -> bytes:
       '<!DOCTYPE html><html lang="en"><head>',
       '<meta charset="utf-8">',
       '<meta name="viewport" content="width=device-width, initial-scale=1">',
-      f'<title>Bastion witness {__version__}</title>',
-      f'<style>{_PAGE_CSS}</style></head><body>',
+      '<title>Certificate of inspection · Bastion witness</title>',
+      f'<style>{_PAGE_CSS}</style></head><body><main class="sheet">',
   ]
-  if report:
-    parts.extend(_render_status(report))
-  parts.extend(_render_intro())
+  parts.extend(_render_sheet_head(report))
   if error:
-    parts.append(f'<div class="err">{_escape(error)}</div>')
+    parts.append(f'<p class="err">{_escape(error)}</p>')
   if report:
     parts.extend(_render_results(report))
-  parts.extend(_render_form(form))
+  parts.extend(_render_form(form, again=bool(report)))
   parts.append(
       '<p class="footer">Runs on this computer only. Private keys are not '
-      'read. Nothing is uploaded.</p>')
-  parts.append('</body></html>')
+      'read. Nothing is uploaded. This page is not saved and not signed.</p>')
+  parts.append('</main></body></html>')
   return ''.join(parts).encode('utf-8')
 
 

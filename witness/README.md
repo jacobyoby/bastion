@@ -14,7 +14,7 @@ PYTHONPATH=. python -m witness.web
 
 Open [http://127.0.0.1:8770/](http://127.0.0.1:8770/). Browsers, installed apps, and SSH start selected; a TLS hostname is optional. Click **Confirm this machine**.
 
-The confirmation screen leads with Confirmed, Needs attention, or Incomplete, then a card for browsers, installed apps, and SSH.
+After you confirm, the page is a certificate of inspection — machine, time, what was witnessed, and a stamp — and the rejected layouts are in [docs/witness_ui_design_space.md](../docs/witness_ui_design_space.md).
 
 Summary states:
 

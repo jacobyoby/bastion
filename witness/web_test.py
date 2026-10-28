@@ -74,17 +74,17 @@ class WitnessWebTest(unittest.TestCase):
     _code, body = handler._last
     text = body.decode('utf-8')
     self.assertEqual(_code, 200)
-    self.assertIn('Witness this machine', text)
-    self.assertIn(
-        'Checks public keys and certificates on this computer, '
-        'then confirms the result.',
-        text)
+    self.assertIn('Certificate of inspection', text)
+    self.assertIn('This computer has not been witnessed.', text)
+    self.assertIn('Not yet issued', text)
     self.assertIn('Confirm this machine', text)
     self.assertIn('Chrome, Chromium, Edge, Firefox', text)
     self.assertIn('package list and public certs in app config', text)
     self.assertIn('authorized_keys and known_hosts', text)
+    self.assertNotIn('Witness this machine', text)
     self.assertNotIn('Run witness checks', text)
     self.assertNotIn('Scan SSH', text)
+    self.assertNotIn('class="choice"', text)
     self.assertGreaterEqual(text.count(' checked'), 3)
 
   def test_landing_mentions_browsers_and_apps_before_results(self):
@@ -223,7 +223,10 @@ class WitnessWebTest(unittest.TestCase):
     }
     text = web._page(None, report, None).decode('utf-8')
     self.assertLess(text.index('id="confirmation"'), text.index('id="results"'))
-    self.assertIn('class="status status-ok"', text)
+    self.assertIn('status status-ok', text)
+    self.assertIn('Certificate of inspection', text)
+    self.assertIn('Not signed', text)
+    self.assertIn('test-host', text)
     self.assertIn(
         'No weak public keys in the browsers, apps, and SSH files we could read.',
         text)
@@ -231,14 +234,32 @@ class WitnessWebTest(unittest.TestCase):
     self.assertIn('No public keys in app configs', text)
     browsers = text.split('id="result-browsers"', 1)[1].split(
         'id="result-apps"', 1)[0]
-    self.assertNotIn('badge-clean', browsers)
-    self.assertIn('badge-skip', browsers)
+    self.assertNotIn('mark-ok', browsers)
+    self.assertIn('mark-skip', browsers)
+    self.assertIn('Not a failure', browsers)
+
+    report['browsers']['none_found'] = False
+    report['browsers']['skipped'] = [{
+        'path': '/etc/ssl/certs/ca-certificates.crt',
+        'reason': 'system trust bundle present',
+        'cert_count': 2,
+        'not_a_pass': True,
+    }]
+    text = web._page(None, report, None).decode('utf-8')
+    browsers = text.split('id="result-browsers"', 1)[1].split(
+        'id="result-apps"', 1)[0]
+    self.assertIn('status status-ok', text)
+    self.assertIn('Not a pass', browsers)
+    self.assertNotIn('mark-ok', browsers)
+    self.assertIn(
+        'Public root certificates were counted, not weakness-scanned.',
+        browsers)
 
     report['overall_status'] = 'needs_attention'
     report['apps']['weak_count'] = 1
     report['apps']['key_count'] = 1
     text = web._page(None, report, None).decode('utf-8')
-    self.assertIn('status-warn', text)
+    self.assertIn('status status-warn', text)
     self.assertIn('1 key needs attention in Installed apps.', text)
 
   def test_incomplete_panel_is_blue(self):
@@ -262,12 +283,12 @@ class WitnessWebTest(unittest.TestCase):
         'key_count': 0,
     }
     text = web._page(None, report, None).decode('utf-8')
-    self.assertIn('class="status status-incomplete"', text)
+    self.assertIn('status status-incomplete', text)
     self.assertIn('Incomplete', text)
     self.assertIn(
         'A file in SSH could not be read, so this confirmation is incomplete.',
         text)
-    self.assertNotIn('class="status status-ok"', text)
+    self.assertNotIn('status status-ok', text)
 
   def test_tls_card_only_when_host_requested(self):
     report = _fake_report()
