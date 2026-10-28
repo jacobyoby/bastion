@@ -11,6 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Local witness checks for SSH keys and optional TLS on this machine."""
+"""Local witness checks for SSH, browsers, installed apps, and optional TLS."""
 
 __version__ = '0.1.0a1'

@@ -52,6 +52,16 @@ def severity_label(severity: int) -> str:
   return _SEVERITY_LABELS.get(severity, 'Unknown')
 
 
+def curve_label(curve_type: int) -> str:
+  try:
+    name = paranoid_pb2.CurveType.Name(int(curve_type))
+  except ValueError:
+    return str(curve_type)
+  if name.startswith('CURVE_'):
+    return name[len('CURVE_'):]
+  return name
+
+
 def check_blurb(name: str) -> str:
   return _CHECK_BLURBS.get(name, 'Bastion cryptographic check.')
 
@@ -74,38 +84,48 @@ def _check_rows(test_info: paranoid_pb2.TestInfo) -> list[dict]:
   return rows
 
 
-def key_artifact_dict(key, key_type: str) -> dict:
+def key_artifact_dict(key, key_type: str, path: str | None = None,
+                      group: str | None = None, subject: str | None = None,
+                      section: str | None = None) -> dict:
   fp = fingerprint_display(key.origin_info.fingerprint)
   return {
       'type': key_type,
       'fingerprint_sha256': fp,
       'weak': bool(key.test_info.weak),
       'checks': _check_rows(key.test_info),
+      'path': path,
+      'group': group,
+      'subject': subject,
+      'section': section,
   }
 
 
 def overall_summary(status: OverallStatus) -> str:
   if status == 'confirmed':
-    return ('Confirmed — no weak SSH keys were found and optional TLS checks '
-            'did not report failures.')
+    return ('Confirmed — scanned SSH, browser, and application keys are clean. '
+            'Skipped sources, including the system trust bundle when it is '
+            'present, are not a pass.')
   if status == 'needs_attention':
-    return ('Needs attention — at least one SSH key or TLS check failed '
-            'Bastion’s witness checks.')
-  return ('Incomplete — some paths could not be read or TLS could not '
-          'complete; review details below.')
+    return ('Needs attention — at least one scanned key or certificate is weak, '
+            'or the TLS witness reported a check failure.')
+  return ('Incomplete — a requested source could not be read, or TLS could not '
+          'complete. Skipped items are not a pass.')
 
 
 class WitnessReport:
   """Structured witness result."""
 
   def __init__(self, machine_hostname: str, timestamp: str, bastion_version: str,
-               ssh: dict, tls: dict, overall_status: OverallStatus):
+               ssh: dict, tls: dict, browsers: dict, apps: dict,
+               overall_status: OverallStatus):
     self.machine_hostname = machine_hostname
     self.timestamp = timestamp
     self.bastion_version = bastion_version
     self.witness_version = __version__
     self.ssh = ssh
     self.tls = tls
+    self.browsers = browsers
+    self.apps = apps
     self.overall_status = overall_status
 
   def to_dict(self) -> dict[str, Any]:
@@ -116,6 +136,8 @@ class WitnessReport:
         'witness_version': self.witness_version,
         'overall_status': self.overall_status,
         'overall_summary': overall_summary(self.overall_status),
+        'browsers': self.browsers,
+        'apps': self.apps,
         'ssh': self.ssh,
         'tls': self.tls,
     }
@@ -123,10 +145,12 @@ class WitnessReport:
 
 def compute_overall_status(ssh_weak: bool, ssh_unreadable: bool,
                            tls_exit_code: int | None,
-                           tls_requested: bool) -> OverallStatus:
-  if ssh_weak or tls_exit_code == 1:
+                           tls_requested: bool,
+                           other_weak: bool = False,
+                           other_unreadable: bool = False) -> OverallStatus:
+  if ssh_weak or other_weak or tls_exit_code == 1:
     return 'needs_attention'
-  if ssh_unreadable or tls_exit_code == 2:
+  if ssh_unreadable or other_unreadable or tls_exit_code == 2:
     return 'incomplete'
   if tls_requested and tls_exit_code is None:
     return 'incomplete'

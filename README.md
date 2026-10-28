@@ -38,8 +38,8 @@ PYTHONPATH=. python -m tlscheck example.com
 ## witness
 
 [witness](witness/README.md) is an alpha **localhost** UI that scans public SSH
-material on this machine (and optionally runs tlscheck against a hostname you
-supply). See the [design doc](docs/witness_design.md).
+material, browser and application certificates, and (optionally) a TLS hostname
+on this machine. See the [design doc](docs/witness_design.md).
 
 ```sh
 PYTHONPATH=. python -m witness.web
