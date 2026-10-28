@@ -24,6 +24,17 @@ Use the [check documentation](docs) to choose the checks appropriate to your dat
 and the [examples](examples) to see how to call them from Python. A passing check
 means that check found no weakness; it does not prove that a key or generator is secure.
 
+## tlscheck
+
+[tlscheck](tlscheck/README.md) is a separate alpha command-line tool in this
+repository. It checks a live TLS certificate against the Mozilla roots shipped
+in certifi. It is not one of the paranoid check runners and it does not use
+the operating system trust store.
+
+```sh
+PYTHONPATH=. python -m tlscheck example.com
+```
+
 ## Differences from upstream
 
 - **SSH public keys:** `ssh_keys.ParseAuthorizedKeys` and

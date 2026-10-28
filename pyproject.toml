@@ -31,6 +31,7 @@ classifiers = [
 ]
 dependencies = [
     "absl-py",
+    "certifi",
     "cryptography",
     "cysignals",
     "fpylll",
@@ -52,7 +53,7 @@ include-package-data = false
 version = {file = "paranoid_crypto/VERSION"}
 
 [tool.setuptools.packages.find]
-include = ["paranoid_crypto*"]
+include = ["paranoid_crypto*", "tlscheck*"]
 
 [tool.setuptools.package-data]
 paranoid_crypto = [

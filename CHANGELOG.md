@@ -19,6 +19,18 @@ Changes in Bastion since it forked from Google's
 
 ### Added
 
+- **tlscheck (alpha).** A standalone TLS certificate checker, not part of the
+  paranoid check runners. `python -m tlscheck HOST` (with the repo root on
+  `PYTHONPATH`, or after `pip install .`) captures the certificates a server
+  presents with verification disabled, then checks them against the Mozilla
+  roots vendored in certifi. It builds a presented path and, when an
+  intermediate is missing, a path that may fetch AIA caIssuers over HTTP.
+  The public-trust profile requires serverAuth, rejects MD5 and SHA-1 and
+  short or non-NIST keys, enforces the 398-day leaf lifetime, matches names
+  by RFC 9525 with no commonName fallback, and checks a stapled OCSP response
+  when one is present. OCSP and CRL downloads are opt-in. There is no
+  Certificate Transparency check and the OS trust store is not used. See
+  [tlscheck/README.md](tlscheck/README.md).
 - **SSH public keys.** `ssh_keys` parses lines of OpenSSH authorized_keys and
   known_hosts files, such as `*.pub` files and ssh-keyscan output, into
   `RSAKey` and `ECKey` protos: ssh-rsa, ecdsa-sha2-nistp256, -nistp384 and
