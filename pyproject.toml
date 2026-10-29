@@ -53,7 +53,7 @@ include-package-data = false
 version = {file = "paranoid_crypto/VERSION"}
 
 [tool.setuptools.packages.find]
-include = ["paranoid_crypto*", "tlscheck*"]
+include = ["paranoid_crypto*", "tlscheck*", "witness*"]
 
 [tool.setuptools.package-data]
 paranoid_crypto = [

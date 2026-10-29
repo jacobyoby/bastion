@@ -19,6 +19,11 @@ Changes in Bastion since it forked from Google's
 
 ### Added
 
+- **witness (alpha).** Local web UI on 127.0.0.1 that scans SSH public keys,
+  public certificates from installed browsers and applications, and optionally
+  runs tlscheck. The system CA bundle and NSS databases are reported as skipped,
+  not as a pass. See [docs/witness_design.md](docs/witness_design.md) and
+  [witness/README.md](witness/README.md).
 - **tlscheck (alpha).** A standalone TLS certificate checker, not part of the
   paranoid check runners. `python -m tlscheck HOST` (with the repo root on
   `PYTHONPATH`, or after `pip install .`) captures the certificates a server

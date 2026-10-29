@@ -28,3 +28,5 @@ jobs:
         # tlscheck is a separate package. Run it from the repository root so
         # `python -m tlscheck` and `import tlscheck` resolve the same tree.
         run: python -m unittest tlscheck.tlscheck_test
+      - name: Test witness
+        run: python -m unittest witness.witness_test witness.web_test
