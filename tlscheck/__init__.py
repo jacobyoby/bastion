@@ -20,6 +20,7 @@ paranoid_crypto check and is not invoked by the paranoid runners.
 Run it with the repository root on PYTHONPATH:
 
   PYTHONPATH=. python -m tlscheck HOST
+  PYTHONPATH=. python -m tlscheck.web
 """
 
 __version__ = '0.1.0a1'

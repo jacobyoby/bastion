@@ -77,7 +77,8 @@ match one. No pins means the pin check is skipped.
 - It does not load a second bundle such as Chrome's root list.
 - It does not treat the Public Suffix List as authoritative. `*.com` is
   rejected because the suffix is a single label. `*.co.uk` is not rejected.
-- It does not run as a long-lived daemon.
+- It does not install a system service. The web page is a process you start
+  yourself. It stops when that process stops.
 - Stapled OCSP is read through OpenSSL on CPython. The handshake requests the
   status_request extension, then reads the staple from the OpenSSL session.
 
@@ -107,6 +108,41 @@ python -m tlscheck HOST [--port 443] [--sni NAME] [--ip ADDR] [--name NAME]
 connect. AIA and opt-in revocation fetches can still use the network.
 `--ocsp` defaults to `staple`. `--at` is the check time; the default is now.
 
+## Local web page
+
+A page on this machine runs the same check. It calls `capture_tls` and
+`run_check` in `tlscheck/run.py`. The browser does not verify certificates,
+and there is no second copy of the checks.
+
+```sh
+PYTHONPATH=. python -m tlscheck.web
+PYTHONPATH=. python -m tlscheck.web --listen 8765
+```
+
+Open http://127.0.0.1:8765/. The process binds to 127.0.0.1 only. `--listen`
+takes a port, or `127.0.0.1:PORT` / `localhost:PORT`. Any other address is
+rejected. The default port is 8765. One check runs at a time.
+
+The form takes a hostname, a port (default 443), an optional SNI, an optional
+expected name, and an optional "allow fetched chain" checkbox. Submit runs
+one check and shows the report on the same page: overall pass or fail, each
+check as pass, fail, or skipped with its reason, the leaf subject, SHA-256
+fingerprint, notAfter, the presented and fetched chains, the bundle id, the
+peer address, the TLS version, and the SNI. A connect or input failure is
+shown as an error.
+
+The page uses the command-line defaults for everything it does not ask about.
+OCSP stapling is checked. OCSP and CRL downloads stay off. Pins are not set.
+
+The page is not a service:
+
+- It has no accounts.
+- It keeps no history.
+- It listens on localhost only, until you stop the process.
+- It has the same alpha limits as the command line. Certificate Transparency
+  is not enforced. The operating system trust store is not used. OCSP and CRL
+  fetches are still opt-in, and the form does not offer them.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -127,5 +163,8 @@ not need a public CA or the network. One live check is skipped unless
 `TLSCHECK_LIVE=1`.
 
 ```sh
-PYTHONPATH=. python -m unittest tlscheck.tlscheck_test
+PYTHONPATH=. python -m unittest tlscheck.tlscheck_test tlscheck.web_test
 ```
+
+`tlscheck.web_test` drives the page handler with a fake checker result. It
+does not open a TLS connection.

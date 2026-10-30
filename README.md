@@ -26,14 +26,18 @@ means that check found no weakness; it does not prove that a key or generator is
 
 ## tlscheck
 
-[tlscheck](tlscheck/README.md) is a separate alpha command-line tool in this
-repository. It checks a live TLS certificate against the Mozilla roots shipped
-in certifi. It is not one of the paranoid check runners and it does not use
-the operating system trust store.
+[tlscheck](tlscheck/README.md) is a separate alpha tool in this repository.
+It checks a live TLS certificate against the Mozilla roots shipped in certifi.
+It is not one of the paranoid check runners and it does not use the operating
+system trust store. A local web page runs the same check.
 
 ```sh
 PYTHONPATH=. python -m tlscheck example.com
+PYTHONPATH=. python -m tlscheck.web
 ```
+
+The page listens on http://127.0.0.1:8765/ until you stop it. It has no
+accounts and keeps no history.
 
 ## witness
 
